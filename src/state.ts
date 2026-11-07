@@ -1,7 +1,9 @@
 // App state: one plain object, a change signal, and the derived file list.
-import type { FileEntry } from "./api";
+import type { Branch, CommitChanges, CommitInfo, FileEntry } from "./api";
 
 export type Screen = "loading" | "welcome" | "repo" | "gone";
+/** The sidebar lists either working-tree changes or the commit history. */
+export type Mode = "changes" | "history";
 export type ViewState = "unviewed" | "viewed" | "stale";
 
 export interface Prefs {
@@ -31,9 +33,25 @@ export const state = {
   root: "",
   name: "",
   branch: "",
+  mode: "changes" as Mode,
+  /** Working-tree changes, always kept current. */
+  work: new Map<string, FileEntry>(),
+  /** The files on display: `work`, or the selected commit's files in history mode. */
   files: new Map<string, FileEntry>(),
   viewed: {} as Record<string, string>,
   selected: null as string | null,
+  history: {
+    branches: [] as Branch[],
+    /** The branch whose log is listed; null for HEAD. */
+    branch: null as string | null,
+    commits: [] as CommitInfo[],
+    /** Every commit of the branch is loaded. */
+    done: false,
+    loading: false,
+    /** The selected commit, once loaded. */
+    open: null as CommitChanges | null,
+    selected: null as string | null,
+  },
   filter: "",
   /** Files updated live since the user last looked at them. */
   updated: new Set<string>(),
@@ -85,6 +103,7 @@ export function changed() {
 // ---- derived ----
 
 export function viewState(f: FileEntry): ViewState {
+  if (state.mode === "history") return "unviewed"; // viewed marks belong to working-tree diffs
   const h = state.viewed[f.path];
   if (!h) return "unviewed";
   return h === f.diffHash ? "viewed" : "stale";
@@ -122,6 +141,11 @@ function byDirThenName(a: FileEntry, b: FileEntry) {
   const y = splitPath(b.path);
   if (x.dir !== y.dir) return x.dir < y.dir ? -1 : 1;
   return x.name < y.name ? -1 : x.name > y.name ? 1 : 0;
+}
+
+/** The commit whose files are on display, or null for the working tree. */
+export function shownCommit(): string | null {
+  return state.mode === "history" ? (state.history.open?.commit.id ?? null) : null;
 }
 
 export function totals() {

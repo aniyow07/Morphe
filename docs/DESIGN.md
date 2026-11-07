@@ -82,6 +82,7 @@ Title bar (custom on Windows/Linux, overlay traffic lights on macOS) · branch c
 · live dot · theme switch (system / light / dark) · sidebar (filter, toggles, file list with optional folder groups) · file row · resize
 divider · sticky file header · diff view (hunk header, line row, collapsed-region separator,
 notices for binary / too large / truncated) · side-by-side view (always wraps, hanging indent) ·
-Markdown preview (Diff / Preview switch) · command palette (Ctrl/Cmd+P) · tooltip
+Markdown preview (Diff / Preview switch) · Changes / History switch · branch picker ·
+commit list (summary, then short id, author and age) · selected commit header · command palette (Ctrl/Cmd+P) · tooltip
 with shortcut hint · welcome screen (open folder, recent repos) · empty state ("Working tree
 clean") · loading skeleton · repo-missing state.

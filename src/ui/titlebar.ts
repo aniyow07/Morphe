@@ -63,7 +63,7 @@ export function titlebar(onRepoClick: () => void): HTMLElement {
     stats.innerHTML = t.files
       ? `<span><b>${fmt.format(t.files)}</b> ${t.files === 1 ? "file" : "files"}</span>` +
         `<span class="add">+${fmt.format(t.add)}</span><span class="del">−${fmt.format(t.del)}</span>` +
-        `<span class="viewed-count"><b>${fmt.format(t.viewed)}</b>/${fmt.format(t.files)} viewed</span>`
+        (state.mode === "changes" ? `<span class="viewed-count"><b>${fmt.format(t.viewed)}</b>/${fmt.format(t.files)} viewed</span>` : "")
       : "";
   });
   return bar;

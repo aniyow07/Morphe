@@ -1,9 +1,10 @@
 //! An open repository: the cached scan results and incremental refresh.
 
 use crate::git::{self, FileDiff, FileEntry, Scanned};
-use git2::{ErrorCode, Repository};
+use crate::history::{self, CommitData, CommitInfo, Walk};
+use git2::{ErrorCode, Oid, Repository};
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -50,7 +51,14 @@ pub struct Session {
     /// `git::state_key` and `git::refs_key` as of the last full rescan.
     state_key: u64,
     refs_key: u64,
+    /// History: the walk behind the commit list, and recently opened commits.
+    walk: Option<Walk>,
+    commits: HashMap<Oid, CommitData>,
+    commit_order: VecDeque<Oid>,
 }
+
+/// Opened commits kept in memory (their file lists and any diffs built so far).
+const COMMIT_CACHE: usize = 32;
 
 impl Session {
     /// Open the repository containing `path` and do the initial scan.
@@ -66,8 +74,18 @@ impl Session {
         let root = dunce(root);
         let git_dir = dunce(repo.path().to_path_buf());
         let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        let mut s =
-            Session { root, git_dir, name, branch: String::new(), files: HashMap::new(), state_key: 0, refs_key: 0 };
+        let mut s = Session {
+            root,
+            git_dir,
+            name,
+            branch: String::new(),
+            files: HashMap::new(),
+            state_key: 0,
+            refs_key: 0,
+            walk: None,
+            commits: HashMap::new(),
+            commit_order: VecDeque::new(),
+        };
         s.full_rescan().map_err(|e| e.message().to_string())?;
         Ok(s)
     }
@@ -118,6 +136,38 @@ impl Session {
         let Ok(repo) = self.repo() else { return false };
         let key = git::refs_key(&repo);
         std::mem::replace(&mut self.refs_key, key) != key
+    }
+
+    /// A page of the commit log of `branch` (HEAD when `None`), newest first. Consecutive
+    /// pages continue the previous walk instead of starting over.
+    pub fn commits(&mut self, branch: Option<&str>, skip: usize, limit: usize) -> Result<Vec<CommitInfo>, git2::Error> {
+        let repo = self.repo()?;
+        let Some(tip) = history::tip(&repo, branch)? else { return Ok(vec![]) };
+        let resumable = matches!(&self.walk, Some(w) if w.tip == tip && w.produced == skip);
+        if !resumable {
+            let mut w = Walk::new(&repo, tip);
+            if skip > 0 {
+                w.next_page(&repo, skip)?;
+            }
+            self.walk = Some(w);
+        }
+        self.walk.as_mut().unwrap().next_page(&repo, limit)
+    }
+
+    /// A commit's changes against its first parent, loaded once and then cached.
+    pub fn commit(&mut self, id: &str) -> Result<(&mut CommitData, Repository), git2::Error> {
+        let repo = self.repo()?;
+        let oid = Oid::from_str(id)?;
+        if !self.commits.contains_key(&oid) {
+            if self.commit_order.len() >= COMMIT_CACHE {
+                if let Some(old) = self.commit_order.pop_front() {
+                    self.commits.remove(&old);
+                }
+            }
+            self.commits.insert(oid, CommitData::load(&repo, oid)?);
+            self.commit_order.push_back(oid);
+        }
+        Ok((self.commits.get_mut(&oid).unwrap(), repo))
     }
 
     /// An empty change set, for "nothing to update".

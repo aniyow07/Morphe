@@ -1,14 +1,24 @@
-// Sidebar: filter box, view toggles, and the keyed file list.
+// Sidebar: Changes / History switch, filter box, view toggles, and the keyed file list.
+// In history mode the commit panel sits above the file list, which then lists the
+// selected commit's files.
 import type { FileEntry } from "../api";
 import { esc, fmt, h, icon, modKey, STATUS_LABEL } from "../dom";
-import { changed, savePrefs, splitPath, state, subscribe, viewState, visibleFiles, type Prefs } from "../state";
+import { changed, savePrefs, splitPath, state, subscribe, viewState, visibleFiles, type Mode, type Prefs } from "../state";
+import { historyPanel, type HistoryActions } from "./history";
 
-export interface SidebarActions {
+export interface SidebarActions extends HistoryActions {
   select: (path: string) => void;
   toggleViewed: (path: string) => void;
+  setMode: (mode: Mode) => void;
 }
 
 export function sidebar(actions: SidebarActions) {
+  const modeBtn = (mode: Mode, label: string) =>
+    h("button", { "data-mode": mode, "aria-pressed": "false", onclick: () => actions.setMode(mode) }, h("span", {}, label), h("span", { class: "mode-count" }));
+  const modes = { changes: modeBtn("changes", "Changes"), history: modeBtn("history", "History") };
+  const modeSwitch = h("div", { class: "seg sb-mode", role: "group", "aria-label": "Sidebar view" }, modes.changes, modes.history);
+  const hist = historyPanel(actions);
+
   const filter = h("input", {
     class: "filter-input",
     type: "text",
@@ -51,12 +61,14 @@ export function sidebar(actions: SidebarActions) {
     toggle("group", icon.group, "Group by folder"),
   ];
 
-  const list = h("div", { class: "file-list", role: "listbox", tabindex: "0", "aria-label": "Changed files" });
+  const list = h("div", { class: "file-list", role: "listbox", tabindex: "0" });
   const emptyNote = h("div", { class: "list-note" });
 
   const root = h(
     "aside",
     { class: "sidebar" },
+    h("div", { class: "sb-top" }, modeSwitch),
+    hist.el,
     h(
       "div",
       { class: "sb-head" },
@@ -93,8 +105,14 @@ export function sidebar(actions: SidebarActions) {
   const groups = new Map<string, HTMLElement>();
 
   subscribe(() => {
+    const historyMode = state.mode === "history";
+    root.classList.toggle("is-history", historyMode);
+    for (const [mode, b] of Object.entries(modes)) b.setAttribute("aria-pressed", String(state.mode === mode));
+    modes.changes.lastElementChild!.textContent = state.work.size ? fmt.format(state.work.size) : "";
+    list.setAttribute("aria-label", historyMode ? "Files in this commit" : "Changed files");
     for (const t of toggles) {
       t.b.setAttribute("aria-pressed", String(state.prefs[t.key]));
+      t.b.hidden = historyMode && t.key !== "group"; // follow and viewed are about the working tree
     }
     if (filter.value !== state.filter) filter.value = state.filter;
 
@@ -133,6 +151,11 @@ export function sidebar(actions: SidebarActions) {
     for (const p of rows.keys()) if (!state.files.has(p)) (rows.delete(p), sigs.delete(p));
 
     emptyNote.hidden = files.length > 0 || state.files.size === 0;
+    if (historyMode && state.history.open && !state.history.open.files.length) {
+      emptyNote.hidden = false;
+      emptyNote.textContent = "No file changes in this commit";
+      return;
+    }
     emptyNote.textContent = state.filter ? `No files match “${state.filter}”` : "All files are marked viewed";
 
     const sel = state.selected && rows.get(state.selected);
@@ -160,10 +183,11 @@ export function sidebar(actions: SidebarActions) {
       row = h("div", { class: "row", role: "option", "data-path": f.path, id: `row-${rows.size}` });
       rows.set(f.path, row);
     }
+    const hist = state.mode === "history";
     const vs = viewState(f);
     const sel = f.path === state.selected;
-    const upd = state.updated.has(f.path);
-    const sig = [f.status, f.staged, f.additions, f.deletions, f.kind, vs, sel, upd, state.prefs.group, f.oldPath].join("|");
+    const upd = !hist && state.updated.has(f.path);
+    const sig = [f.status, f.staged, f.additions, f.deletions, f.kind, vs, sel, upd, state.prefs.group, f.oldPath, hist].join("|");
     if (sigs.get(f.path) !== sig) {
       sigs.set(f.path, sig);
       const { dir, name } = splitPath(f.path);
@@ -186,7 +210,7 @@ export function sidebar(actions: SidebarActions) {
         `<span class="nm"><span class="fn">${esc(name)}</span>${!state.prefs.group && dir ? `<span class="dr">${esc(dir)}</span>` : ""}</span>` +
         `<span class="mk">${vs === "stale" ? `<span class="stale" data-tip="Changed since viewed"></span>` : ""}${staged}<span class="upd" data-tip="Updated"></span></span>` +
         `<span class="ct">${counts}</span>` +
-        `<button class="vw${vs === "viewed" ? " on" : ""}" tabindex="-1" aria-label="${vwLabel}" data-tip="${vwLabel}" data-kbd="V">${icon.check}</button>`;
+        (hist ? "" : `<button class="vw${vs === "viewed" ? " on" : ""}" tabindex="-1" aria-label="${vwLabel}" data-tip="${vwLabel}" data-kbd="V">${icon.check}</button>`);
       if (sel) list.setAttribute("aria-activedescendant", row.id);
     }
     return row;
@@ -194,6 +218,7 @@ export function sidebar(actions: SidebarActions) {
 
   return {
     el: root,
+    focusCommits: hist.focusList,
     focusFilter() {
       filter.focus();
       filter.select();

@@ -1,4 +1,5 @@
 pub mod git;
+pub mod history;
 pub mod session;
 pub mod store;
 pub mod watch;
@@ -92,6 +93,56 @@ fn get_file_text(state: State<AppState>, path: String) -> CmdResult<Option<Strin
 }
 
 #[tauri::command]
+fn list_branches(state: State<AppState>) -> CmdResult<Vec<history::Branch>> {
+    with_session(&state, |s| history::branches(&s.repo()?))
+}
+
+#[tauri::command]
+fn list_commits(
+    state: State<AppState>,
+    branch: Option<String>,
+    skip: usize,
+    limit: usize,
+) -> CmdResult<Vec<history::CommitInfo>> {
+    with_session(&state, |s| s.commits(branch.as_deref(), skip, limit.min(500)))
+}
+
+#[tauri::command]
+fn open_commit(state: State<AppState>, id: String) -> CmdResult<history::CommitChanges> {
+    with_session(&state, |s| Ok(s.commit(&id)?.0.changes.clone()))
+}
+
+#[tauri::command]
+fn get_commit_diff(state: State<AppState>, id: String, path: String) -> CmdResult<Option<git::FileDiff>> {
+    with_session(&state, |s| {
+        let (c, repo) = s.commit(&id)?;
+        Ok(c.diff(&repo, &path)?.map(|d| (*d).clone()))
+    })
+}
+
+#[tauri::command]
+fn get_commit_lines(state: State<AppState>, id: String, path: String, start: u32, end: u32) -> CmdResult<Vec<String>> {
+    with_session(&state, |s| {
+        let (c, repo) = s.commit(&id)?;
+        c.lines(&repo, &path, start, end)
+    })
+}
+
+#[tauri::command]
+fn get_commit_file_text(state: State<AppState>, id: String, path: String) -> CmdResult<Option<String>> {
+    with_session(&state, |s| {
+        let (c, repo) = s.commit(&id)?;
+        c.text(&repo, &path)
+    })
+}
+
+fn with_session<T>(state: &State<AppState>, f: impl FnOnce(&mut Session) -> Result<T, git2::Error>) -> CmdResult<T> {
+    let mut guard = state.session.lock().unwrap();
+    let session = guard.as_mut().ok_or("No repository open")?;
+    f(session).map_err(|e| e.message().to_string())
+}
+
+#[tauri::command]
 fn set_viewed(state: State<AppState>, path: String, hash: Option<String>) -> CmdResult<()> {
     let root = root_of(&state)?;
     state.store.set_viewed(&root.to_string_lossy(), &path, hash.as_deref());
@@ -155,7 +206,13 @@ pub fn run() {
             recent_repos,
             forget_recent,
             launch_path,
-            close_repo
+            close_repo,
+            list_branches,
+            list_commits,
+            open_commit,
+            get_commit_diff,
+            get_commit_lines,
+            get_commit_file_text
         ])
         .run(tauri::generate_context!())
         .expect("error while running Morphe");

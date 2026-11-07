@@ -1,6 +1,6 @@
 //! Dev tool: dump a repo's scan as JSON for the browser mock (`npm run dev`, then open
 //! http://localhost:1420/?mock). Usage: cargo run --example dump -- <repo> > ../.mock/fixture.json
-use morphe_lib::git;
+use morphe_lib::{git, history};
 use std::collections::HashMap;
 
 fn main() {
@@ -20,10 +20,34 @@ fn main() {
     files.sort_by(|a, b| a.path.cmp(&b.path));
     let root = repo.workdir().unwrap().to_string_lossy().trim_end_matches(['/', '\\']).to_string();
     let name = root.rsplit(['/', '\\']).next().unwrap_or("repo").to_string();
+    // History: branches, the first commits, and full data for the newest few.
+    let branches = history::branches(&repo).unwrap_or_default();
+    let commits = match history::tip(&repo, None) {
+        Ok(Some(tip)) => history::Walk::new(&repo, tip).next_page(&repo, 300).unwrap_or_default(),
+        _ => vec![],
+    };
+    let mut opened = serde_json::Map::new();
+    for c in commits.iter().take(12) {
+        let mut data = history::CommitData::load(&repo, git2::Oid::from_str(&c.id).unwrap()).unwrap();
+        let mut cdiffs = serde_json::Map::new();
+        let mut ctexts = serde_json::Map::new();
+        for f in data.changes.files.clone() {
+            if let Ok(Some(d)) = data.diff(&repo, &f.path) {
+                cdiffs.insert(f.path.clone(), serde_json::to_value(&*d).unwrap());
+            }
+            if let Ok(Some(t)) = data.text(&repo, &f.path) {
+                ctexts.insert(f.path.clone(), t.into());
+            }
+        }
+        opened.insert(c.id.clone(), serde_json::json!({ "changes": data.changes, "diffs": cdiffs, "texts": ctexts }));
+    }
     let out = serde_json::json!({
         "snapshot": { "root": root, "name": name, "branch": git::branch_name(&repo), "files": files, "viewed": {} },
         "diffs": diffs,
         "texts": texts,
+        "branches": branches,
+        "commits": commits,
+        "opened": opened,
     });
     println!("{}", serde_json::to_string(&out).unwrap());
 }

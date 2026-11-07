@@ -5,7 +5,8 @@ import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { state } from "../state";
 
 export async function installMock() {
-  const fx = await (await fetch("/.mock/fixture.json")).json();
+  const name = new URLSearchParams(location.search).get("fixture") ?? "fixture";
+  const fx = await (await fetch(`/.mock/${name}.json`)).json();
   const lines = (p: string) => (fx.texts[p] ?? "").split("\n").map((l: string) => l.replace(/\r$/, ""));
   mockWindows("main");
   mockIPC(
@@ -21,6 +22,18 @@ export async function installMock() {
           return lines(args.path).slice(args.start - 1, args.end);
         case "get_file_text":
           return fx.texts[args.path] ?? null;
+        case "list_branches":
+          return fx.branches ?? [];
+        case "list_commits":
+          return (fx.commits ?? []).slice(args.skip, args.skip + args.limit);
+        case "open_commit":
+          return fx.opened?.[args.id]?.changes ?? { commit: fx.commits.find((c: any) => c.id === args.id), body: "", files: [] };
+        case "get_commit_diff":
+          return fx.opened?.[args.id]?.diffs[args.path] ?? null;
+        case "get_commit_lines":
+          return (fx.opened?.[args.id]?.texts[args.path] ?? "").split("\n").slice(args.start - 1, args.end);
+        case "get_commit_file_text":
+          return fx.opened?.[args.id]?.texts[args.path] ?? null;
         case "recent_repos":
           return [
             { path: fx.snapshot.root, name: fx.snapshot.name, openedAt: Date.now() },
@@ -53,6 +66,14 @@ export async function installMock() {
   });
   if (q.has("noanim")) document.head.append(Object.assign(document.createElement("style"), { textContent: "*{animation:none!important;transition:none!important}" }));
   setTimeout(async () => {
+    if (q.has("history")) {
+      document.querySelector<HTMLElement>('.sb-mode [data-mode="history"]')?.click();
+      await new Promise((r) => setTimeout(r, 300));
+      const c = q.get("commit");
+      if (c) document.querySelectorAll<HTMLElement>(".crow")[Number(c)]?.click();
+      await new Promise((r) => setTimeout(r, 300));
+      if (q.has("branches")) document.querySelector<HTMLElement>(".branch-btn")?.click();
+    }
     const sel = q.get("select");
     if (sel) document.querySelector<HTMLElement>(`.row[data-path="${CSS.escape(sel)}"]`)?.click();
     await new Promise((r) => setTimeout(r, 400));

@@ -554,6 +554,235 @@ kbd {
   text-align: center;
 }
 
+/* ---------- sidebar: Changes / History ---------- */
+
+.sb-top {
+  padding: var(--s-12) var(--s-12) 0;
+}
+.sb-mode button {
+  flex: 1;
+  justify-content: center;
+  height: 24px;
+}
+.mode-count {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.sb-mode button[aria-pressed="true"] .mode-count {
+  color: var(--text-muted);
+}
+
+.hist {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 140px;
+}
+.sidebar.is-history .sb-head {
+  padding-top: var(--s-8);
+}
+.sidebar.is-history .file-list {
+  flex: 1.2 1 0;
+}
+
+.hist-bar {
+  position: relative;
+  padding: var(--s-8) var(--s-12) var(--s-6);
+}
+.branch-btn {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  padding: 0 var(--s-8);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  color: var(--text);
+  transition: border-color var(--t-fast) var(--ease-out);
+}
+.branch-btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+.branch-btn svg {
+  flex: none;
+  color: var(--text-faint);
+}
+.bb-name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bb-chev {
+  display: flex;
+  transform: rotate(90deg);
+}
+.branch-btn[aria-expanded="true"] .bb-chev {
+  transform: rotate(-90deg);
+}
+
+.menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% - 2px);
+  left: var(--s-12);
+  right: var(--s-12);
+  max-height: 300px;
+  overflow-y: auto;
+  padding: var(--s-4);
+  background: var(--surface);
+  border-radius: var(--r-float);
+  box-shadow: var(--shadow-float);
+}
+.mi {
+  width: 100%;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  padding: 0 var(--s-8) 0 var(--s-6);
+  border-radius: var(--r-control);
+  color: var(--text);
+  text-align: left;
+}
+.mi:hover,
+.mi:focus-visible {
+  background: var(--surface-hover);
+  box-shadow: none;
+}
+.mi-check {
+  flex: none;
+  width: 14px;
+  display: flex;
+  color: var(--accent-text);
+}
+.mi-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mi-note {
+  font-size: var(--fs-11);
+  color: var(--text-faint);
+}
+
+.commit-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s-2) var(--s-6) var(--s-8);
+}
+.commit-list:focus-visible {
+  box-shadow: none;
+}
+.crow {
+  display: grid;
+  gap: 1px;
+  padding: 5px var(--s-8) 6px;
+  border-radius: var(--r-control);
+  cursor: default;
+  /* cheap virtualization for long histories */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 44px;
+}
+.crow:hover {
+  background: var(--surface-hover);
+}
+.crow[aria-selected="true"] {
+  background: var(--surface-active);
+}
+.commit-list:focus-visible .crow[aria-selected="true"] {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.c-sum {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crow[aria-selected="true"] .c-sum {
+  font-weight: 500;
+}
+.c-meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-8);
+  font-size: var(--fs-12);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+}
+.c-sha {
+  flex: none;
+  font: 11.5px / 1 var(--font-code);
+  color: var(--text-muted);
+}
+.c-author {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.c-merge {
+  flex: none;
+  font-size: var(--fs-11);
+  line-height: 15px;
+  padding: 0 var(--s-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-badge);
+}
+.c-time {
+  flex: none;
+  margin-left: auto;
+}
+.commit-more {
+  padding: var(--s-8);
+}
+
+.commit-head {
+  display: grid;
+  gap: var(--s-4);
+  padding: var(--s-12) var(--s-16) var(--s-2);
+  border-top: 1px solid var(--border);
+}
+.ch-sum {
+  font-weight: 500;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.ch-body {
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  cursor: pointer;
+}
+.commit-head.expanded .ch-body {
+  display: block;
+  max-height: 30vh;
+  overflow-y: auto;
+}
+.ch-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--s-8);
+  font-size: var(--fs-12);
+  color: var(--text-faint);
+}
+
 /* skeletons */
 .sk {
   display: block;
@@ -1429,4 +1658,9 @@ kbd {
   .row.pulse::before {
     animation: none;
   }
+}
+
+/* History: only the filter; follow and viewed don't apply to commits */
+.sidebar.is-history .sb-tools {
+  display: none;
 }

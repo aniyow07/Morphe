@@ -12,6 +12,9 @@ updating the moment files change.
 - Live updates with no polling; changed files get a brief accent trace and an "updated" dot
 - "Follow latest edit" mode, per-file "Viewed" marks that reset when the file changes again,
   and "Hide viewed"
+- History: any local branch's commits, newest first, loaded 100 at a time as you scroll.
+  Selecting a commit shows its changes against its first parent in the same file list and diff
+  view (unified, side by side, Markdown preview)
 - Light, dark, or follow the OS
 
 ## Keyboard
@@ -19,6 +22,7 @@ updating the moment files change.
 | Key | Action |
 |---|---|
 | `J` / `K` (or `↓` / `↑` in the list) | Next / previous file |
+| `Shift+J` / `Shift+K` (or `↓` / `↑` in the commit list) | Next / previous commit, in History |
 | `V` | Toggle viewed for the selected file |
 | `/` | Focus the filter box (`Esc` clears it) |
 | `Ctrl+P` / `⌘P` | Jump to a file |
@@ -50,6 +54,7 @@ cd src-tauri && cargo test
 src-tauri/src/
   git.rs      status + per-file diffs against HEAD (libgit2), word-level emphasis (similar)
   session.rs  the open repo: cached results, path-limited and full rescans, change sets
+  history.rs  branches, the paged commit log, one commit's files and diffs
   watch.rs    notify + 150 ms debounce, classifies events, drops ignored paths
   store.rs    app-data JSON: recent repos, viewed marks per repo
   lib.rs      Tauri commands and events
@@ -90,6 +95,13 @@ with exact-height placeholders, so a 20,000-line diff keeps a small DOM. Syntax 
 highlight.js core with one grammar loaded on demand per language, and is skipped for diffs over
 5,000 lines. Markdown preview uses marked + DOMPurify; remote images are replaced by their alt
 text because Morphe makes no network requests.
+
+**History.** The log is walked newest-first by commit time (git log's default order) with a
+resumable walk, so each page of 100 continues where the last one stopped instead of starting
+over. Opening a commit diffs its tree against its first parent's (the empty tree for a root
+commit) with rename detection; file counts come up front and each file's full diff is built the
+first time you open it. The last 32 opened commits stay cached, since commits never change. When
+a branch or `HEAD` moves, the list reloads.
 
 **Viewed marks** are stored per repository in the app-data directory as `path → diff hash`. When
 the file's diff changes, the hash no longer matches and the file shows "Changed since viewed".

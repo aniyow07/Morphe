@@ -61,6 +61,27 @@ export interface Change {
   branch: string;
 }
 
+export interface Branch {
+  /** Short name, or "HEAD" for a detached HEAD. */
+  name: string;
+  current: boolean;
+}
+
+export interface CommitInfo {
+  id: string;
+  summary: string;
+  author: string;
+  /** Seconds since the epoch. */
+  time: number;
+  parents: number;
+}
+
+export interface CommitChanges {
+  commit: CommitInfo;
+  body: string;
+  files: FileEntry[];
+}
+
 export interface Recent {
   path: string;
   name: string;
@@ -77,10 +98,25 @@ export const api = {
   recentRepos: () => invoke<Recent[]>("recent_repos"),
   forgetRecent: (path: string) => invoke<void>("forget_recent", { path }),
   launchPath: () => invoke<string | null>("launch_path"),
+  listBranches: () => invoke<Branch[]>("list_branches"),
+  listCommits: (branch: string | null, skip: number, limit: number) => invoke<CommitInfo[]>("list_commits", { branch, skip, limit }),
+  openCommit: (id: string) => invoke<CommitChanges>("open_commit", { id }),
+};
+
+/** Reads that work against the working tree, or against a commit when `commit` is set. */
+export const source = {
+  diff: (path: string, commit: string | null) =>
+    commit ? invoke<FileDiff | null>("get_commit_diff", { id: commit, path }) : api.getDiff(path),
+  lines: (path: string, start: number, end: number, commit: string | null) =>
+    commit ? invoke<string[]>("get_commit_lines", { id: commit, path, start, end }) : api.getLines(path, start, end),
+  text: (path: string, commit: string | null) =>
+    commit ? invoke<string | null>("get_commit_file_text", { id: commit, path }) : api.getFileText(path),
 };
 
 export const events = {
   onChanged: (cb: (c: Change) => void): Promise<UnlistenFn> => listen<Change>("repo:changed", (e) => cb(e.payload)),
   onBranch: (cb: (b: string) => void): Promise<UnlistenFn> => listen<string>("repo:branch", (e) => cb(e.payload)),
   onGone: (cb: (root: string) => void): Promise<UnlistenFn> => listen<string>("repo:gone", (e) => cb(e.payload)),
+  /** A branch or HEAD moved (commit, checkout, fetch into a local branch). */
+  onRefs: (cb: () => void): Promise<UnlistenFn> => listen("repo:refs", () => cb()),
 };

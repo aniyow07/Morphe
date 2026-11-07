@@ -3,11 +3,11 @@
 // Long diffs render lazily in fixed-size chunks: placeholders with exact heights stand in
 // until a chunk scrolls near the viewport, so the DOM stays small and scroll position is
 // stable while files change underneath.
-import { api, type FileDiff, type FileEntry, type Hunk, type Line } from "../api";
+import { source, type FileDiff, type FileEntry, type Hunk, type Line } from "../api";
 import { esc, fmt, h, icon, modKey, STATUS_LABEL } from "../dom";
 import { highlightLines, loadLanguage, readyLanguage, type Seg } from "../highlight";
 import { isMarkdown, renderMarkdown } from "../markdown";
-import { changed, savePrefs, splitPath, state, viewState } from "../state";
+import { changed, savePrefs, shownCommit, splitPath, state, viewState } from "../state";
 
 const CHUNK = 200;
 const ROW_H = 20;
@@ -39,7 +39,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
   const el = h("section", { class: "pane" }, header, scroller);
 
   let gen = 0;
-  let current: { path: string; diff: FileDiff | null; mode: "diff" | "preview" } | null = null;
+  let current: { path: string; commit: string | null; diff: FileDiff | null; mode: "diff" | "preview" } | null = null;
   let chunks: Chunk[] = [];
   let headerHtml = "";
   let hl: { lang: string; sides: Map<number, { old: Seg[][]; neu: Seg[][]; oi: number[]; ni: number[] }> } | null = null;
@@ -105,12 +105,18 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
     const { dir, name } = splitPath(f.path);
     const vs = viewState(f);
     const md = isMarkdown(f.path) && f.kind === "text";
-    const tags = [
-      f.staged === "full" ? `<span class="tag">Staged</span>` : "",
-      f.staged === "partial" ? `<span class="tag">Partially staged</span>` : "",
-      vs === "stale" ? `<span class="tag tag-stale">Changed since viewed</span>` : "",
-      state.updated.has(f.path) ? `<span class="tag tag-upd">Updated</span>` : "",
-    ].join("");
+    const hist = state.mode === "history";
+    const merge = hist && (state.history.open?.commit.parents ?? 0) > 1;
+    const tags = hist
+      ? merge
+        ? `<span class="tag" data-tip="Merge commits are shown against their first parent">vs first parent</span>`
+        : ""
+      : [
+          f.staged === "full" ? `<span class="tag">Staged</span>` : "",
+          f.staged === "partial" ? `<span class="tag">Partially staged</span>` : "",
+          vs === "stale" ? `<span class="tag tag-stale">Changed since viewed</span>` : "",
+          state.updated.has(f.path) ? `<span class="tag tag-upd">Updated</span>` : "",
+        ].join("");
     const rename = f.oldPath ? `<span class="fh-old">${esc(f.oldPath)}</span><span class="fh-arrow">→</span>` : "";
     const counts =
       f.kind === "text" ? `<span class="add">+${fmt.format(f.additions)}</span><span class="del">−${fmt.format(f.deletions)}</span>` : "";
@@ -127,7 +133,9 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
         ? `<button class="tgl split-tgl" aria-pressed="${state.prefs.split}" aria-label="Side-by-side view" data-tip="Side-by-side view">${icon.split}</button>` +
           `<button class="tgl wrap-tgl" aria-pressed="${state.prefs.wrap || state.prefs.split}" aria-label="Wrap long lines" data-tip="${state.prefs.split ? "Lines always wrap side by side" : "Wrap long lines"}"${state.prefs.split ? " disabled" : ""}>${icon.wrap}</button>`
         : "") +
-      `<button class="viewed-box${vs === "viewed" ? " on" : ""}" role="checkbox" aria-checked="${vs === "viewed"}" data-tip="Mark as viewed" data-kbd="V"><span class="box">${icon.check}</span>Viewed</button>` +
+      (hist
+        ? ""
+        : `<button class="viewed-box${vs === "viewed" ? " on" : ""}" role="checkbox" aria-checked="${vs === "viewed"}" data-tip="Mark as viewed" data-kbd="V"><span class="box">${icon.check}</span>Viewed</button>`) +
       `</span>`;
     // Only touch the DOM when something visible changed, so hover and tooltips survive.
     if (html !== headerHtml) header.innerHTML = headerHtml = html;
@@ -143,18 +151,19 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
       return;
     }
     const f = state.files.get(path)!;
+    const commit = shownCommit();
     const mode = isMarkdown(path) && state.prefs.mdPreview && f.kind === "text" ? "preview" : "diff";
-    const same = current?.path === path && current.mode === mode;
+    const same = current?.path === path && current.mode === mode && current.commit === commit;
     const anchor = refresh && same ? captureAnchor() : null;
     const keepTop = refresh && same ? scroller.scrollTop : 0;
-    current = { path, diff: same ? current!.diff : null, mode };
+    current = { path, commit, diff: same ? current!.diff : null, mode };
     renderHeader();
 
     // Only show the skeleton when loading is actually slow, and never on live refreshes.
     const skel = !same ? setTimeout(() => my === gen && renderSkeleton(), 120) : 0;
 
     if (mode === "preview") {
-      const text = await api.getFileText(path).catch(() => null);
+      const text = await source.text(path, commit).catch(() => null);
       clearTimeout(skel);
       if (my !== gen) return;
       resetBody();
@@ -167,7 +176,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
       return;
     }
 
-    const diff = await api.getDiff(path).catch(() => null);
+    const diff = await source.diff(path, commit).catch(() => null);
     clearTimeout(skel);
     if (my !== gen) return;
     current.diff = diff;
@@ -195,6 +204,19 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
   function renderEmpty() {
     resetBody();
     if (state.screen !== "repo") return;
+    if (state.mode === "history") {
+      const open = state.history.open;
+      const title = !open ? (state.history.commits.length ? "Select a commit" : "No commits yet") : open.files.length ? "Select a file" : "No file changes";
+      const sub = !open
+        ? state.history.commits.length
+          ? "Pick a commit on the left to see what it changed."
+          : "History appears here after the first commit."
+        : open.files.length
+          ? `Use J and K to move through files, or ${modKey}+P to jump to one.`
+          : "This commit doesn't change any files compared to its first parent.";
+      scroller.append(h("div", { class: "empty" }, h("h2", { class: "empty-title" }, title), h("p", { class: "empty-sub" }, sub)));
+      return;
+    }
     const clean = state.files.size === 0;
     scroller.append(
       h(
@@ -301,7 +323,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
     const start = Number(gap.dataset.start);
     const end = Number(gap.dataset.end);
     const delta = Number(gap.dataset.delta);
-    const texts = await api.getLines(current.path, start, end).catch(() => null);
+    const texts = await source.lines(current.path, start, end, current.commit).catch(() => null);
     if (my !== gen || !texts || !gap.isConnected) return;
     const lines: Line[] = texts.map((t, i) => ({ k: " ", n: start + i, o: start + i + delta, t }));
     const segs = hl && lines.length <= HIGHLIGHT_MAX_LINES ? highlightLines(texts, hl.lang) : null;

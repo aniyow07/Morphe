@@ -140,23 +140,7 @@ pub fn scan(
 
     let mut out = Vec::new();
     for (idx, delta) in diff.deltas().enumerate() {
-        let status = match delta.status() {
-            Delta::Added | Delta::Copied => "A",
-            Delta::Untracked => "U",
-            Delta::Deleted => "D",
-            Delta::Modified | Delta::Conflicted => "M",
-            Delta::Renamed => "R",
-            Delta::Typechange => "T",
-            _ => continue,
-        };
-        let Some(path) = delta.new_file().path().or(delta.old_file().path()).map(path_str) else {
-            continue;
-        };
-        let old_path = (status == "R").then(|| delta.old_file().path().map(path_str)).flatten();
-        // Submodules (gitlinks) have no content of their own to show here.
-        if delta.new_file().mode() == git2::FileMode::Commit || delta.old_file().mode() == git2::FileMode::Commit {
-            continue;
-        }
+        let Some((status, path, old_path)) = describe(&delta) else { continue };
 
         let (size, mtime) = file_meta(&workdir.join(&path));
         let old_id = delta.old_file().id();
@@ -195,7 +179,11 @@ pub fn scan(
             )
         } else {
             match Patch::from_diff(&diff, idx)? {
-                Some(patch) if !patch.delta().flags().is_binary() => build_text_diff(&path, &patch, &workdir)?,
+                Some(patch) if !patch.delta().flags().is_binary() => {
+                    let (mut d, add, del) = build_text_diff(&path, &patch)?;
+                    d.new_total = std::fs::read(workdir.join(&path)).map(|b| count_lines(&b)).unwrap_or(0);
+                    (d, add, del)
+                }
                 _ => (
                     FileDiff { path: path.clone(), kind: Kind::Binary, truncated: false, new_total: 0, hunks: vec![] },
                     0,
@@ -231,6 +219,26 @@ pub fn scan(
         });
     }
     Ok(out)
+}
+
+/// Status letter, path and (for renames) old path of a delta; `None` for deltas not shown,
+/// such as submodules (gitlinks), which have no content of their own here.
+pub(crate) fn describe(delta: &git2::DiffDelta) -> Option<(&'static str, String, Option<String>)> {
+    let status = match delta.status() {
+        Delta::Added | Delta::Copied => "A",
+        Delta::Untracked => "U",
+        Delta::Deleted => "D",
+        Delta::Modified | Delta::Conflicted => "M",
+        Delta::Renamed => "R",
+        Delta::Typechange => "T",
+        _ => return None,
+    };
+    if delta.new_file().mode() == git2::FileMode::Commit || delta.old_file().mode() == git2::FileMode::Commit {
+        return None;
+    }
+    let path = delta.new_file().path().or(delta.old_file().path()).map(path_str)?;
+    let old_path = (status == "R").then(|| delta.old_file().path().map(path_str)).flatten();
+    Some((status, path, old_path))
 }
 
 fn head_tree(repo: &Repository) -> Result<Option<git2::Tree<'_>>, git2::Error> {
@@ -293,7 +301,8 @@ pub fn refs_key(repo: &Repository) -> u64 {
     h.0
 }
 
-fn build_text_diff(path: &str, patch: &Patch, workdir: &Path) -> Result<(FileDiff, u32, u32), git2::Error> {
+/// Converts a patch into hunks and lines. `new_total` is left for the caller to fill in.
+pub(crate) fn build_text_diff(path: &str, patch: &Patch) -> Result<(FileDiff, u32, u32), git2::Error> {
     let mut hunks = Vec::with_capacity(patch.num_hunks());
     let mut total = 0usize;
     let mut truncated = false;
@@ -329,9 +338,8 @@ fn build_text_diff(path: &str, patch: &Patch, workdir: &Path) -> Result<(FileDif
         }
     }
     let (_, additions, deletions) = patch.line_stats()?;
-    let new_total = std::fs::read(workdir.join(path)).map(|b| count_lines(&b)).unwrap_or(0);
     Ok((
-        FileDiff { path: path.to_string(), kind: Kind::Text, truncated, new_total, hunks },
+        FileDiff { path: path.to_string(), kind: Kind::Text, truncated, new_total: 0, hunks },
         additions as u32,
         deletions as u32,
     ))
@@ -352,14 +360,17 @@ fn hash_text_diff(status: &str, d: &FileDiff) -> String {
 
 /// Lines `start..=end` (1-based) of the working-tree file, for expanding unchanged regions.
 pub fn read_lines(workdir: &Path, path: &str, start: u32, end: u32) -> std::io::Result<Vec<String>> {
-    let bytes = std::fs::read(workdir.join(path))?;
-    let text = String::from_utf8_lossy(&bytes);
-    Ok(text
+    Ok(slice_lines(&std::fs::read(workdir.join(path))?, start, end))
+}
+
+/// Lines `start..=end` (1-based) of some file content.
+pub(crate) fn slice_lines(bytes: &[u8], start: u32, end: u32) -> Vec<String> {
+    String::from_utf8_lossy(bytes)
         .split('\n')
         .skip(start.saturating_sub(1) as usize)
         .take((end + 1).saturating_sub(start) as usize)
         .map(|l| l.strip_suffix('\r').unwrap_or(l).to_string())
-        .collect())
+        .collect()
 }
 
 /// Full text of the working-tree file, or the HEAD version if it was deleted.
@@ -376,10 +387,15 @@ pub fn file_text(repo: &Repository, path: &str) -> Result<Option<String>, git2::
             None => return Ok(None),
         },
     };
+    Ok(text_of(bytes))
+}
+
+/// File content as text; `None` for binary or oversized content.
+pub(crate) fn text_of(bytes: Vec<u8>) -> Option<String> {
     if bytes.len() as u64 > MAX_FILE_BYTES || bytes.iter().take(8000).any(|&b| b == 0) {
-        return Ok(None);
+        return None;
     }
-    Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
+    Some(String::from_utf8(bytes).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned()))
 }
 
 /// Short name of the current branch, also for unborn branches and detached HEAD.
@@ -516,7 +532,7 @@ fn utf16_offsets(tokens: &[&str]) -> Vec<u32> {
 
 // ---------- small helpers ----------
 
-fn path_str(p: &Path) -> String {
+pub(crate) fn path_str(p: &Path) -> String {
     p.to_string_lossy().replace('\\', "/")
 }
 
@@ -526,7 +542,7 @@ fn clean_line(content: &[u8]) -> String {
     s.strip_suffix('\r').unwrap_or(s).to_string()
 }
 
-fn count_lines(bytes: &[u8]) -> u32 {
+pub(crate) fn count_lines(bytes: &[u8]) -> u32 {
     if bytes.is_empty() {
         return 0;
     }
