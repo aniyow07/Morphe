@@ -1422,3 +1422,11 @@ kbd {
   box-shadow: none;
   border-radius: 0;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot.tick,
+  .row.pulse,
+  .row.pulse::before {
+    animation: none;
+  }
+}
