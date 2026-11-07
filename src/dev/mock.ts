@@ -38,6 +38,13 @@ export async function installMock() {
           return (fx.opened?.[args.id]?.texts[args.path] ?? "").split("\n").slice(args.start - 1, args.end);
         case "get_commit_file_text":
           return fx.opened?.[args.id]?.texts[args.path] ?? null;
+        case "set_scan_options":
+          // The mock has no git: whitespace-only files can't be detected, so drop nothing.
+          (window as any).__scanOpts = args;
+          return fx.snapshot;
+        case "open_in_editor":
+          (window as any).__opened = args;
+          return null;
         case "recent_repos":
           return [
             { path: fx.snapshot.root, name: fx.snapshot.name, openedAt: Date.now() },

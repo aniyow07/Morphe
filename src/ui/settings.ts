@@ -69,6 +69,15 @@ const SEG: Partial<Record<keyof Prefs, { opts: Opt[]; display?: boolean; diff?: 
     display: true,
   },
   follow: { opts: onOff },
+  ignoreWs: { opts: onOff },
+  editor: {
+    opts: [
+      { v: "code", label: "VS Code" },
+      { v: "cursor", label: "Cursor" },
+      { v: "zed", label: "Zed" },
+      { v: "", label: "System default" },
+    ],
+  },
   reopenLast: { opts: onOff },
 };
 
@@ -78,6 +87,7 @@ const KEYS: [string, string][] = [
   ["V", "Mark the selected file viewed"],
   ["/", "Filter files (Esc clears)"],
   [`${modKey}+P`, "Jump to a file"],
+  [`${modKey}+F`, "Find in the open file (Enter / Shift+Enter for next / previous)"],
   [`${modKey}+,`, "Settings"],
   ["Esc", "Close a menu or this sheet"],
 ];
@@ -197,6 +207,7 @@ export function settings(hooks: { refreshDiff: () => void }) {
     return (
       row("Text size", "Size of code in diffs and file views.", seg("codeSize", "Text size")) +
       row("Tab width", "How many columns a tab character takes.", seg("tabWidth", "Tab width")) +
+      row("Ignore whitespace", "Hide changes that only add or remove spaces, tabs or line endings. Files with nothing else changed drop out of Changes.", seg("ignoreWs", "Ignore whitespace")) +
       row("Syntax highlighting", "Off shows plain text, which is a little faster on huge files.", seg("syntax", "Syntax highlighting")) +
       row("Layout", "Also on the button above each diff.", seg("split", "Layout")) +
       row("Wrap long lines", "Side by side always wraps.", seg("wrap", "Wrap long lines")) +
@@ -206,6 +217,7 @@ export function settings(hooks: { refreshDiff: () => void }) {
 
   function general() {
     return (
+      row("Open files in", "Used by the open button above each file, and by double-clicking a line.", seg("editor", "Open files in")) +
       row("Reopen last repository", "On launch, open the most recent repository instead of the start screen.", seg("reopenLast", "Reopen last repository")) +
       row("Follow latest edit", "Jump to each file as it changes. Same as the toggle above the file list.", seg("follow", "Follow latest edit"))
     );

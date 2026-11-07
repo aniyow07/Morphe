@@ -18,6 +18,15 @@ updating the moment files change.
 - "All files": the whole working tree as a folder tree (loaded one folder at a time, ignored
   files left out), changed files in their status color and folders showing how many changes
   they hold. Unchanged files open read-only; J / K still step through changed files only
+- Compare with another branch: in a repo with more than one branch, a "Compare with" picker
+  above the file list shows everything since this branch split from the chosen one (committed
+  and uncommitted), instead of only what differs from the last commit
+- Ignore whitespace (Settings → Diff): hides whitespace-only edits; files with nothing else
+  changed drop out of the list
+- Open in editor: the button above each file, or double-click a line to open it there
+  (VS Code, Cursor, Zed or the system default app; Settings → General)
+- Find in the open file with `Ctrl+F` / `⌘F`. It searches the lines shown, not collapsed
+  unchanged regions
 - Settings (gear in the title bar, `Ctrl+,` / `⌘,`): light, dark or match the OS, and a theme
   for each: Graphite, Midnight, Ember, Forest and High contrast (dark); Paper, Sand and Mist
   (light). The sun/moon button in the title bar flips between your light and dark theme
@@ -35,6 +44,7 @@ updating the moment files change.
 | `/` | Focus the filter box (`Esc` clears it) |
 | `Ctrl+P` / `⌘P` | Jump to a file |
 | `Ctrl+,` / `⌘,` | Settings |
+| `Ctrl+F` / `⌘F` | Find in the open file (`Enter` / `Shift+Enter` for next / previous) |
 
 ## Running it
 

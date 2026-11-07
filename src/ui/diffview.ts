@@ -13,6 +13,7 @@ const CHUNK = 200;
 /** Code line height in px, from the --lh-code token (it follows the text size setting). */
 const rowH = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--lh-code")) || 20;
 const HIGHLIGHT_MAX_LINES = 5000;
+const OPEN_BTN = `<button class="tgl open-tgl" aria-label="Open in editor" data-tip="Open in editor (or double-click a line)">${icon.external}</button>`;
 const HIGHLIGHT_MAX_LINE_LEN = 2000;
 const EAGER_WRAP_LINES = 3000;
 
@@ -34,10 +35,94 @@ interface Chunk {
   filled: boolean;
 }
 
-export function diffView(actions: { toggleViewed: (path: string) => void }) {
+export function diffView(actions: { toggleViewed: (path: string) => void; openInEditor: (path: string, line: number | null) => void }) {
   const header = h("div", { class: "fh" });
   const scroller = h("div", { class: "diff-scroll", tabindex: "-1" });
-  const el = h("section", { class: "pane" }, header, scroller);
+  const findInput = h("input", { class: "find-input", type: "text", placeholder: "Find in file", spellcheck: "false", autocomplete: "off", "aria-label": "Find in file" });
+  const findCount = h("span", { class: "find-count", "aria-live": "polite" });
+  const findBtn = (cls: string, label: string, ic: string) => h("button", { class: `tgl ${cls}`, "aria-label": label, "data-tip": label, html: ic });
+  const findBar = h(
+    "div",
+    { class: "find", hidden: true, role: "search" },
+    findInput,
+    findCount,
+    findBtn("find-prev", "Previous match (Shift+Enter)", icon.up),
+    findBtn("find-next", "Next match (Enter)", icon.down),
+    findBtn("find-close", "Close (Esc)", icon.close),
+  );
+  const el = h("section", { class: "pane" }, header, findBar, scroller);
+
+  // ---- find in file: searches the rows on screen's model (hidden unchanged regions are not searched) ----
+  let hits: { c: number; r: number }[] = [];
+  let hitAt = -1;
+  let hitEl: HTMLElement | null = null;
+  function runFind(jump = true) {
+    const q = findInput.value.toLowerCase();
+    hits = [];
+    if (q) {
+      chunks.forEach((c, ci) =>
+        c.rows.forEach((r, ri) => {
+          if (r.a?.t.toLowerCase().includes(q) || r.b?.t.toLowerCase().includes(q)) hits.push({ c: ci, r: ri });
+        }),
+      );
+    }
+    hitAt = hits.length && jump ? 0 : -1;
+    if (jump) showHit();
+    else findCount.textContent = findInput.value ? `${hits.length} ${hits.length === 1 ? "match" : "matches"}` : "";
+  }
+  function showHit() {
+    hitEl?.classList.remove("find-hit");
+    hitEl = null;
+    findCount.textContent = findInput.value ? (hits.length ? `${hitAt + 1} of ${hits.length}` : "No matches") : "";
+    const hit = hits[hitAt];
+    if (!hit) return;
+    const c = chunks[hit.c];
+    fill(c);
+    hitEl = c.el.children[hit.r] as HTMLElement | undefined ?? null;
+    if (!hitEl) return;
+    hitEl.classList.add("find-hit");
+    hitEl.scrollIntoView({ block: "center" });
+    fillVisible();
+  }
+  function stepFind(d: 1 | -1) {
+    if (!hits.length) return;
+    hitAt = (hitAt + d + hits.length) % hits.length;
+    showHit();
+  }
+  function openFind() {
+    findBar.hidden = false;
+    findInput.focus();
+    findInput.select();
+    if (findInput.value) runFind();
+  }
+  function closeFind() {
+    findBar.hidden = true;
+    hitEl?.classList.remove("find-hit");
+    hitEl = null;
+    scroller.focus();
+  }
+  findInput.addEventListener("input", () => runFind());
+  findInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") (hitAt < 0 ? runFind() : stepFind(e.shiftKey ? -1 : 1));
+    else if (e.key === "Escape") closeFind();
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  findBar.addEventListener("click", (e) => {
+    const t = e.target as HTMLElement;
+    if (t.closest(".find-prev")) stepFind(-1);
+    else if (t.closest(".find-next")) stepFind(1);
+    else if (t.closest(".find-close")) closeFind();
+  });
+
+  // Double-click a line to open the file there in the editor.
+  scroller.addEventListener("dblclick", (e) => {
+    const row = (e.target as HTMLElement).closest<HTMLElement>("[data-n], [data-o]");
+    if (!row || !current || current.mode !== "diff") return;
+    const n = row.dataset.n ?? row.dataset.o;
+    actions.openInEditor(current.path, n ? Number(n) : null);
+  });
 
   let gen = 0;
   /** `plain`: an unchanged file opened from the "All files" tree, shown as its contents. */
@@ -64,6 +149,10 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
   header.addEventListener("click", (e) => {
     const t = e.target as HTMLElement;
     if (!current) return;
+    if (t.closest(".open-tgl")) {
+      actions.openInEditor(current.path, null);
+      return;
+    }
     if (t.closest(".viewed-box")) {
       e.preventDefault();
       actions.toggleViewed(current.path);
@@ -129,6 +218,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
       `<span class="fh-tags">${tags}</span>` +
       `<span class="fh-counts">${counts}</span>` +
       `<span class="fh-tools">` +
+      OPEN_BTN +
       (md
         ? `<span class="seg" role="group" aria-label="View mode"><button data-mode="diff" aria-pressed="${!state.prefs.mdPreview}" data-tip="Show diff">${icon.code}<span>Diff</span></button><button data-mode="preview" aria-pressed="${state.prefs.mdPreview}" data-tip="Show rendered Markdown">${icon.preview}<span>Preview</span></button></span>`
         : "") +
@@ -152,6 +242,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
       `<span class="fh-path" title="${esc(path)}">${dir ? `<span class="dr">${esc(dir)}/</span>` : ""}<span class="fn">${esc(name)}</span></span>` +
       `<span class="fh-tags"><span class="tag">Unchanged</span></span><span class="fh-counts"></span>` +
       `<span class="fh-tools">` +
+      OPEN_BTN +
       (isMarkdown(path)
         ? `<span class="seg" role="group" aria-label="View mode"><button data-mode="diff" aria-pressed="${!state.prefs.mdPreview}" data-tip="Show source">${icon.code}<span>Source</span></button><button data-mode="preview" aria-pressed="${state.prefs.mdPreview}" data-tip="Show rendered Markdown">${icon.preview}<span>Preview</span></button></span>`
         : "") +
@@ -236,6 +327,9 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
 
   function resetBody() {
     chunks = [];
+    hits = [];
+    hitEl = null;
+    if (!findBar.hidden) queueMicrotask(() => runFind(false));
     hl = null;
     scroller.replaceChildren();
     scroller.classList.toggle("wrap", state.prefs.wrap);
@@ -485,6 +579,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
     scrollBy(dy: number) {
       scroller.scrollBy({ top: dy });
     },
+    openFind,
     /** Re-render the open file in place (after a display setting changes). */
     refresh() {
       if (current) show(current.path, true);

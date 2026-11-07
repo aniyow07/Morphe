@@ -105,6 +105,9 @@ export const api = {
   launchPath: () => invoke<string | null>("launch_path"),
   listDir: (path: string) => invoke<DirEntry[]>("list_dir", { path }),
   listBranches: () => invoke<Branch[]>("list_branches"),
+  /** Rescan with whitespace ignored or not, against HEAD or the merge base with `base`. */
+  setScanOptions: (ignoreWhitespace: boolean, base: string | null) => invoke<Snapshot>("set_scan_options", { ignoreWhitespace, base }),
+  openInEditor: (path: string, line: number | null, editor: string) => invoke<void>("open_in_editor", { path, line, editor }),
   listCommits: (branch: string | null, skip: number, limit: number) => invoke<CommitInfo[]>("list_commits", { branch, skip, limit }),
   openCommit: (id: string) => invoke<CommitChanges>("open_commit", { id }),
 };

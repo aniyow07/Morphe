@@ -56,10 +56,12 @@ function toggleViewed(path: string) {
 
 async function openRepo(path: string) {
   state.screen = "loading";
+  state.base = null;
   state.error = "";
   changed();
   try {
     applySnapshot(await api.openRepo(path));
+    if (state.prefs.ignoreWs) await applyScanOptions();
   } catch (e) {
     state.screen = "welcome";
     state.error = String(e);
@@ -254,6 +256,44 @@ function onRefs() {
 
 const historyActions = { selectCommit, setBranch, loadMore: () => loadHistory(false) };
 
+// ---------- scan options: ignore whitespace, compare against a branch ----------
+
+async function applyScanOptions() {
+  if (state.screen !== "repo") return;
+  try {
+    const s = await api.setScanOptions(state.prefs.ignoreWs, state.base);
+    const before = Array.from(state.work.keys());
+    state.work = new Map(s.files.map((f) => [f.path, f]));
+    if (state.mode === "changes") state.files = state.work;
+    state.viewed = s.viewed;
+    invalidate(before.concat(s.files.map((f) => f.path)));
+    changed();
+    if (state.mode !== "changes") return;
+    if (state.selected && !state.files.has(state.selected) && !treeMode()) select(visibleFiles()[0]?.path ?? null);
+    else dv.show(state.selected, true);
+  } catch (e) {
+    toast(String(e));
+  }
+}
+
+function setBase(name: string | null) {
+  state.base = name;
+  applyScanOptions();
+}
+
+function openInEditor(path: string, line: number | null) {
+  api.openInEditor(path, line, state.prefs.editor).catch((e) => toast(String(e)));
+}
+
+const toastEl = h("div", { class: "toast", role: "status", hidden: true });
+let toastTimer = 0;
+function toast(msg: string) {
+  toastEl.textContent = msg;
+  toastEl.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => (toastEl.hidden = true), 5000);
+}
+
 function mostRecent(files: FileEntry[]): FileEntry | undefined {
   return files.reduce<FileEntry | undefined>((best, f) => (!best || f.mtime > best.mtime ? f : best), undefined);
 }
@@ -261,15 +301,15 @@ function mostRecent(files: FileEntry[]): FileEntry | undefined {
 // ---------- layout ----------
 
 const app = document.getElementById("app")!;
-const sb = sidebar({ select, toggleViewed, setMode, ...historyActions });
-const dv = diffView({ toggleViewed });
+const sb = sidebar({ select, toggleViewed, setMode, setBase, ...historyActions });
+const dv = diffView({ toggleViewed, openInEditor });
 const divider = h("div", { class: "divider", role: "separator", "aria-orientation": "vertical", "aria-label": "Resize sidebar", tabindex: "0" });
 const workspace = h("main", { class: "workspace" }, sb.el, divider, dv.el);
 const wl = welcome(openRepo, pickFolder);
 const gone = goneState(pickFolder, () => openRepo(state.root));
 const pal = palette((p) => select(p));
 const prefsSheet = settings({ refreshDiff: () => dv.refresh() });
-app.append(titlebar(goWelcome, prefsSheet.open), workspace, wl.el, gone.el, pal.el, prefsSheet.el);
+app.append(titlebar(goWelcome, prefsSheet.open), workspace, wl.el, gone.el, pal.el, prefsSheet.el, toastEl);
 tooltips();
 
 subscribe(() => {
@@ -316,6 +356,11 @@ document.addEventListener("keydown", (e) => {
     prefsSheet.open();
     return;
   }
+  if ((e.ctrlKey || e.metaKey) && k === "f" && state.screen === "repo") {
+    e.preventDefault();
+    dv.openFind();
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && k === "p") {
     e.preventDefault();
     if (state.screen === "repo") pal.open();
@@ -336,6 +381,7 @@ document.addEventListener("keydown", (e) => {
 
 document.addEventListener("morphe:pref", (e) => {
   const key = (e as CustomEvent<string>).detail;
+  if (key === "ignoreWs") applyScanOptions();
   if (key === "allFiles" && state.prefs.allFiles && state.selected) reveal(state.selected);
   if (key === "allFiles" && !state.prefs.allFiles && state.selected && !state.files.has(state.selected)) {
     select(visibleFiles()[0]?.path ?? null);

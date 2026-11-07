@@ -1965,3 +1965,108 @@ kbd {
   display: flex;
   color: var(--accent-text);
 }
+
+/* ---------- compare-with, find bar, toast ---------- */
+.sb-base {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  min-width: 0;
+  font-size: var(--fs-12);
+  color: var(--text-faint);
+}
+.sb-base-l {
+  flex: none;
+}
+.base-select {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 var(--s-4);
+  font: inherit;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  cursor: pointer;
+}
+.base-select:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.base-select:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.base-select option {
+  background: var(--surface);
+  color: var(--text);
+}
+.sb-base[hidden],
+.sidebar.is-history .sb-base {
+  display: none;
+}
+
+.pane {
+  position: relative;
+}
+.find {
+  position: absolute;
+  top: calc(var(--s-8) + 44px);
+  right: var(--s-24);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-4) var(--s-4) var(--s-4) var(--s-8);
+  background: var(--surface);
+  border-radius: var(--r-control);
+  box-shadow: var(--shadow-float);
+}
+.find[hidden] {
+  display: none;
+}
+.find-input {
+  width: 200px;
+  height: 26px;
+  padding: 0 var(--s-6);
+  font: inherit;
+  font-size: var(--fs-13);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-badge);
+}
+.find-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.find-count {
+  min-width: 64px;
+  font-size: var(--fs-12);
+  color: var(--text-faint);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.find-hit {
+  box-shadow: inset 3px 0 0 var(--accent);
+  background-image: linear-gradient(var(--accent-soft), var(--accent-soft));
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: var(--s-24);
+  transform: translateX(-50%);
+  z-index: 50;
+  max-width: min(520px, 100% - 32px);
+  padding: var(--s-8) var(--s-12);
+  font-size: var(--fs-13);
+  color: var(--text);
+  background: var(--surface);
+  border-radius: var(--r-control);
+  box-shadow: var(--shadow-float);
+}
+.toast[hidden] {
+  display: none;
+}

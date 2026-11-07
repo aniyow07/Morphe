@@ -27,10 +27,14 @@ export interface Prefs {
   motion: "system" | "reduce";
   /** With no folder passed on the command line, open the most recent repository. */
   reopenLast: boolean;
+  /** Hide whitespace-only changes in Changes. */
+  ignoreWs: boolean;
+  /** Editor command for "Open in editor" ("code", "cursor", "zed"); "" is the OS default app. */
+  editor: string;
 }
 
 const PREFS_KEY = "morphe.prefs";
-const defaults: Prefs = { follow: false, hideViewed: false, group: false, wrap: false, sidebarWidth: 300, mdPreview: false, split: false, theme: "system", allFiles: false, darkTheme: "graphite", lightTheme: "paper", codeSize: "m", tabWidth: 4, syntax: true, density: "default", motion: "system", reopenLast: false };
+const defaults: Prefs = { follow: false, hideViewed: false, group: false, wrap: false, sidebarWidth: 300, mdPreview: false, split: false, theme: "system", allFiles: false, darkTheme: "graphite", lightTheme: "paper", codeSize: "m", tabWidth: 4, syntax: true, density: "default", motion: "system", reopenLast: false, ignoreWs: false, editor: "code" };
 
 function loadPrefs(): Prefs {
   try {
@@ -42,6 +46,8 @@ function loadPrefs(): Prefs {
 
 export const state = {
   screen: "loading" as Screen,
+  /** Changes compare against the merge base with this branch; null compares against HEAD. */
+  base: null as string | null,
   root: "",
   name: "",
   branch: "",

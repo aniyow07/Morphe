@@ -1,7 +1,7 @@
 // Sidebar: Changes / History switch, filter box, view toggles, and the keyed file list.
 // In history mode the commit panel sits above the file list, which then lists the
 // selected commit's files.
-import type { FileEntry } from "../api";
+import { api, type FileEntry } from "../api";
 import { esc, fmt, h, icon, modKey, STATUS_LABEL } from "../dom";
 import { changed, savePrefs, splitPath, state, subscribe, treeMode, viewState, visibleFiles, type Mode, type Prefs } from "../state";
 import { historyPanel, type HistoryActions } from "./history";
@@ -11,6 +11,7 @@ export interface SidebarActions extends HistoryActions {
   select: (path: string) => void;
   toggleViewed: (path: string) => void;
   setMode: (mode: Mode) => void;
+  setBase: (branch: string | null) => void;
 }
 
 export function sidebar(actions: SidebarActions) {
@@ -63,6 +64,31 @@ export function sidebar(actions: SidebarActions) {
     toggle("group", icon.group, "Group by folder"),
   ];
 
+  // What Changes compares against: the last commit, or where this branch split from another.
+  const baseSel = h("select", { class: "base-select", "aria-label": "Compare changes against" }) as HTMLSelectElement;
+  const fillBase = async () => {
+    const branches = await api.listBranches().catch(() => []);
+    const opts = [`<option value="">Last commit (HEAD)</option>`].concat(
+      branches.filter((b) => !b.current && b.name !== "HEAD").map((b) => `<option value="${esc(b.name)}">Since branching from ${esc(b.name)}</option>`),
+    );
+    baseSel.innerHTML = opts.join("");
+    baseSel.value = state.base ?? "";
+    // Nothing to compare with in a single-branch repo, so don't show the control.
+    baseRow.hidden = opts.length === 1 && !state.base;
+  };
+  baseSel.addEventListener("pointerdown", fillBase);
+  baseSel.addEventListener("focus", fillBase);
+  baseSel.addEventListener("change", () => actions.setBase(baseSel.value || null));
+  const baseRow = h("label", { class: "sb-base", "data-tip": "Compare against" }, h("span", { class: "sb-base-l" }, "Compare with"), baseSel);
+  fillBase();
+  let baseRoot = "";
+  subscribe(() => {
+    if (state.root !== baseRoot || baseSel.value !== (state.base ?? "")) {
+      baseRoot = state.root;
+      fillBase();
+    }
+  });
+
   const list = h("div", { class: "file-list", role: "listbox", tabindex: "0" });
   const emptyNote = h("div", { class: "list-note" });
 
@@ -76,6 +102,7 @@ export function sidebar(actions: SidebarActions) {
       { class: "sb-head" },
       h("label", { class: "filter" }, h("span", { class: "filter-icon", html: icon.search }), filter, h("kbd", { class: "filter-kbd" }, "/")),
       h("div", { class: "sb-tools" }, ...toggles.map((t) => t.b), h("span", { class: "sb-hint", "data-tip": "Jump to file", "data-kbd": `${modKey}+P` }, `${modKey} P`)),
+      baseRow,
     ),
     list,
     emptyNote,
