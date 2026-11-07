@@ -19,10 +19,18 @@ export interface Prefs {
   allFiles: boolean;
   darkTheme: string;
   lightTheme: string;
+  /** Diff text size step. */
+  codeSize: "s" | "m" | "l" | "xl";
+  tabWidth: 2 | 4 | 8;
+  syntax: boolean;
+  density: "compact" | "default" | "roomy";
+  motion: "system" | "reduce";
+  /** With no folder passed on the command line, open the most recent repository. */
+  reopenLast: boolean;
 }
 
 const PREFS_KEY = "morphe.prefs";
-const defaults: Prefs = { follow: false, hideViewed: false, group: false, wrap: false, sidebarWidth: 300, mdPreview: false, split: false, theme: "system", allFiles: false, darkTheme: "graphite", lightTheme: "paper" };
+const defaults: Prefs = { follow: false, hideViewed: false, group: false, wrap: false, sidebarWidth: 300, mdPreview: false, split: false, theme: "system", allFiles: false, darkTheme: "graphite", lightTheme: "paper", codeSize: "m", tabWidth: 4, syntax: true, density: "default", motion: "system", reopenLast: false };
 
 function loadPrefs(): Prefs {
   try {

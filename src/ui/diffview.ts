@@ -10,7 +10,8 @@ import { isMarkdown, renderMarkdown } from "../markdown";
 import { changed, savePrefs, shownCommit, splitPath, state, treeMode, viewState } from "../state";
 
 const CHUNK = 200;
-const ROW_H = 20;
+/** Code line height in px, from the --lh-code token (it follows the text size setting). */
+const rowH = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--lh-code")) || 20;
 const HIGHLIGHT_MAX_LINES = 5000;
 const HIGHLIGHT_MAX_LINE_LEN = 2000;
 const EAGER_WRAP_LINES = 3000;
@@ -356,7 +357,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
 
   function addChunk(rows: Row[], segs: (Seg[] | null)[] | null, hunk: number): Chunk {
     const c: Chunk = { el: h("div", { class: "chunk" }), rows, segs, hunk, filled: false };
-    c.el.style.height = `${rows.length * ROW_H}px`;
+    c.el.style.height = `${rows.length * rowH()}px`;
     chunks.push(c);
     return c;
   }
@@ -483,6 +484,10 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
     },
     scrollBy(dy: number) {
       scroller.scrollBy({ top: dy });
+    },
+    /** Re-render the open file in place (after a display setting changes). */
+    refresh() {
+      if (current) show(current.path, true);
     },
   };
 }

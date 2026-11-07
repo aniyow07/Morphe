@@ -29,6 +29,22 @@ export function shownKind(): "light" | "dark" {
   return state.prefs.theme === "system" ? (osLight.matches ? "light" : "dark") : state.prefs.theme;
 }
 
+const CODE_SIZE = { s: [11.5, 18], m: [12.5, 20], l: [14, 22], xl: [15.5, 24] } as const;
+const ROW = { compact: 24, default: 28, roomy: 32 } as const;
+
+/** Display settings that live on tokens: diff text size, tab width, row height, motion. */
+export function applyDisplay() {
+  const p = state.prefs;
+  const root = document.documentElement;
+  const [fs, lh] = CODE_SIZE[p.codeSize] ?? CODE_SIZE.m;
+  root.style.setProperty("--fs-code", `${fs}px`);
+  root.style.setProperty("--lh-code", `${lh}px`);
+  root.style.setProperty("--tab", String(p.tabWidth));
+  root.style.setProperty("--row-h", `${ROW[p.density] ?? 28}px`);
+  if (p.motion === "reduce") root.dataset.motion = "reduce";
+  else delete root.dataset.motion;
+}
+
 export function applyTheme() {
   const kind = shownKind();
   const id = kind === "dark" ? state.prefs.darkTheme : state.prefs.lightTheme;
@@ -65,3 +81,4 @@ osLight.addEventListener("change", () => {
   document.dispatchEvent(new CustomEvent("morphe:theme"));
 });
 applyTheme();
+applyDisplay();

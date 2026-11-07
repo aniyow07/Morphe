@@ -286,6 +286,13 @@
   --gap-bg: #edf1f7;
 }
 
+/* Settings → Reduce motion */
+:root[data-motion="reduce"] {
+  --t-fast: 0ms;
+  --t-med: 0ms;
+  --t-trace: 0ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --t-fast: 0ms;

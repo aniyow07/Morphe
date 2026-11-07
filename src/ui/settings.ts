@@ -1,25 +1,100 @@
-// Settings sheet (gear in the title bar, or Ctrl/Cmd+,): appearance mode and themes.
+// Settings sheet (sliders in the title bar, or Ctrl/Cmd+,). Sections down the left, one shown at a time.
 import { esc, h, icon, modKey } from "../dom";
-import { changed, state } from "../state";
-import { setMode, setTheme, shownKind, THEMES, type ThemeDef } from "../theme";
+import { changed, savePrefs, state, type Prefs } from "../state";
+import { applyDisplay, setMode, setTheme, shownKind, THEMES, type ThemeDef } from "../theme";
 
-const MODES = [
-  { id: "system", label: "Match system" },
-  { id: "light", label: "Light" },
-  { id: "dark", label: "Dark" },
-] as const;
+type Section = "appearance" | "diff" | "general" | "keys";
+const SECTIONS: { id: Section; label: string }[] = [
+  { id: "appearance", label: "Appearance" },
+  { id: "diff", label: "Diff" },
+  { id: "general", label: "General" },
+  { id: "keys", label: "Shortcuts" },
+];
 
-export function settings() {
+type Opt = { v: string; label: string };
+const onOff: Opt[] = [
+  { v: "true", label: "On" },
+  { v: "false", label: "Off" },
+];
+
+/** Settings shown as segmented controls: pref key, options, and what a change needs. */
+const SEG: Partial<Record<keyof Prefs, { opts: Opt[]; display?: boolean; diff?: boolean }>> = {
+  codeSize: {
+    opts: [
+      { v: "s", label: "Small" },
+      { v: "m", label: "Default" },
+      { v: "l", label: "Large" },
+      { v: "xl", label: "Larger" },
+    ],
+    display: true,
+    diff: true,
+  },
+  tabWidth: {
+    opts: [
+      { v: "2", label: "2" },
+      { v: "4", label: "4" },
+      { v: "8", label: "8" },
+    ],
+    display: true,
+  },
+  syntax: { opts: onOff, diff: true },
+  split: {
+    opts: [
+      { v: "false", label: "Unified" },
+      { v: "true", label: "Side by side" },
+    ],
+    diff: true,
+  },
+  wrap: { opts: onOff, diff: true },
+  mdPreview: {
+    opts: [
+      { v: "false", label: "Diff" },
+      { v: "true", label: "Preview" },
+    ],
+    diff: true,
+  },
+  density: {
+    opts: [
+      { v: "compact", label: "Compact" },
+      { v: "default", label: "Default" },
+      { v: "roomy", label: "Roomy" },
+    ],
+    display: true,
+  },
+  motion: {
+    opts: [
+      { v: "system", label: "Match system" },
+      { v: "reduce", label: "Reduce" },
+    ],
+    display: true,
+  },
+  follow: { opts: onOff },
+  reopenLast: { opts: onOff },
+};
+
+const KEYS: [string, string][] = [
+  ["J / K", "Next / previous file"],
+  ["Shift+J / Shift+K", "Next / previous commit, in History"],
+  ["V", "Mark the selected file viewed"],
+  ["/", "Filter files (Esc clears)"],
+  [`${modKey}+P`, "Jump to a file"],
+  [`${modKey}+,`, "Settings"],
+  ["Esc", "Close a menu or this sheet"],
+];
+
+export function settings(hooks: { refreshDiff: () => void }) {
+  const nav = h("nav", { class: "set-nav", "aria-label": "Settings sections" });
   const body = h("div", { class: "set-body" });
   const closeBtn = h("button", { class: "tgl set-close", "aria-label": "Close settings", "data-tip": "Close", "data-kbd": "Esc", html: icon.close });
   const sheet = h(
     "div",
     { class: "set", role: "dialog", "aria-modal": "true", "aria-labelledby": "set-title" },
     h("div", { class: "set-head" }, h("h2", { class: "set-title", id: "set-title" }, "Settings"), closeBtn),
-    body,
+    h("div", { class: "set-main" }, nav, body),
   );
   const scrim = h("div", { class: "pal-scrim set-scrim", hidden: true }, sheet);
   let restoreFocus: Element | null = null;
+  let section: Section = "appearance";
 
   scrim.addEventListener("mousedown", (e) => e.target === scrim && close());
   closeBtn.addEventListener("click", close);
@@ -30,18 +105,52 @@ export function settings() {
     }
     e.stopPropagation();
   });
+  nav.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>("[data-section]");
+    if (!b) return;
+    section = b.dataset.section as Section;
+    render();
+    body.scrollTop = 0;
+  });
   body.addEventListener("click", (e) => {
     const t = e.target as HTMLElement;
     const m = t.closest<HTMLElement>("[data-set-mode]");
-    if (m) setMode(m.dataset.setMode as "system" | "light" | "dark");
     const card = t.closest<HTMLElement>("[data-theme-id]");
-    if (card) setTheme(THEMES.find((x) => x.id === card.dataset.themeId)!);
-    if (m || card) {
-      render();
-      changed();
-    }
+    const opt = t.closest<HTMLElement>("[data-pref]");
+    if (m) setMode(m.dataset.setMode as "system" | "light" | "dark");
+    else if (card) setTheme(THEMES.find((x) => x.id === card.dataset.themeId)!);
+    else if (opt) setPref(opt.dataset.pref as keyof Prefs, opt.dataset.val!);
+    else return;
+    render();
+    changed();
   });
   document.addEventListener("morphe:theme", () => !scrim.hidden && render());
+
+  function setPref(key: keyof Prefs, raw: string) {
+    const prev = state.prefs[key];
+    const val = raw === "true" ? true : raw === "false" ? false : typeof prev === "number" ? Number(raw) : raw;
+    if (val === prev) return;
+    (state.prefs as unknown as Record<string, unknown>)[key] = val;
+    savePrefs();
+    const spec = SEG[key]!;
+    if (spec.display) applyDisplay();
+    if (spec.diff) hooks.refreshDiff();
+    // The sidebar listens for this to act on prefs it owns (follow jumps to the latest edit).
+    document.dispatchEvent(new CustomEvent("morphe:pref", { detail: key }));
+  }
+
+  function seg(key: keyof Prefs, label: string) {
+    const cur = String(state.prefs[key]);
+    return (
+      `<span class="seg" role="group" aria-label="${esc(label)}">` +
+      SEG[key]!.opts.map((o) => `<button data-pref="${key}" data-val="${o.v}" aria-pressed="${cur === o.v}">${esc(o.label)}</button>`).join("") +
+      `</span>`
+    );
+  }
+
+  function row(label: string, help: string, control: string) {
+    return `<div class="set-row"><div><div class="set-label">${label}</div>${help ? `<p class="set-help">${help}</p>` : ""}</div>${control}</div>`;
+  }
 
   function card(t: ThemeDef) {
     const chosen = (t.kind === "dark" ? state.prefs.darkTheme : state.prefs.lightTheme) === t.id;
@@ -58,27 +167,71 @@ export function settings() {
     );
   }
 
-  function render() {
+  function appearance() {
     const mode = state.prefs.theme;
     const kind = shownKind();
+    const modes = [
+      ["system", "Match system"],
+      ["light", "Light"],
+      ["dark", "Dark"],
+    ];
     const group = (k: "dark" | "light", title: string) =>
       `<div class="set-group"><div class="set-label">${title}${kind === k ? `<span class="set-note">showing now</span>` : ""}</div>` +
       `<div class="theme-grid">${THEMES.filter((t) => t.kind === k).map(card).join("")}</div></div>`;
-    body.innerHTML =
-      `<section class="set-section"><h3 class="set-h">Appearance</h3>` +
-      `<div class="set-row"><div><div class="set-label">Mode</div>` +
-      `<p class="set-help">Match system switches between your dark and light theme with the OS.</p></div>` +
-      `<span class="seg" role="group" aria-label="Mode">${MODES.map((m) => `<button data-set-mode="${m.id}" aria-pressed="${mode === m.id}">${m.label}</button>`).join("")}</span></div>` +
+    return (
+      row(
+        "Mode",
+        "Match system switches between your dark and light theme with the OS.",
+        `<span class="seg" role="group" aria-label="Mode">${modes.map(([id, l]) => `<button data-set-mode="${id}" aria-pressed="${mode === id}">${l}</button>`).join("")}</span>`,
+      ) +
       group("dark", "Dark theme") +
       group("light", "Light theme") +
-      `</section>`;
+      `<div class="set-group">` +
+      row("Row density", "Height of rows in the file list, tree and history.", seg("density", "Row density")) +
+      row("Motion", "Reduce turns off the live-change trace and other animations.", seg("motion", "Motion")) +
+      `</div>`
+    );
+  }
+
+  function diff() {
+    return (
+      row("Text size", "Size of code in diffs and file views.", seg("codeSize", "Text size")) +
+      row("Tab width", "How many columns a tab character takes.", seg("tabWidth", "Tab width")) +
+      row("Syntax highlighting", "Off shows plain text, which is a little faster on huge files.", seg("syntax", "Syntax highlighting")) +
+      row("Layout", "Also on the button above each diff.", seg("split", "Layout")) +
+      row("Wrap long lines", "Side by side always wraps.", seg("wrap", "Wrap long lines")) +
+      row("Markdown files open as", "Switch any time with Diff / Preview above the file.", seg("mdPreview", "Markdown files open as"))
+    );
+  }
+
+  function general() {
+    return (
+      row("Reopen last repository", "On launch, open the most recent repository instead of the start screen.", seg("reopenLast", "Reopen last repository")) +
+      row("Follow latest edit", "Jump to each file as it changes. Same as the toggle above the file list.", seg("follow", "Follow latest edit"))
+    );
+  }
+
+  function keys() {
+    const k = (s: string) => s.split(" / ").map((p) => p.split("+").map((x) => `<kbd>${esc(x)}</kbd>`).join("+")).join(" / ");
+    return (
+      `<table class="set-keys"><tbody>` +
+      KEYS.map(([key, what]) => `<tr><td>${k(key)}</td><td>${esc(what)}</td></tr>`).join("") +
+      `</tbody></table>`
+    );
+  }
+
+  function render() {
+    nav.innerHTML = SECTIONS.map((s) => `<button data-section="${s.id}" aria-current="${s.id === section ? "page" : "false"}">${s.label}</button>`).join("");
+    const title = SECTIONS.find((s) => s.id === section)!.label;
+    const content = section === "appearance" ? appearance() : section === "diff" ? diff() : section === "general" ? general() : keys();
+    body.innerHTML = `<h3 class="set-h">${title}</h3>${content}`;
   }
 
   function open() {
     restoreFocus = document.activeElement;
     render();
     scrim.hidden = false;
-    (body.querySelector<HTMLElement>('[aria-pressed="true"]') ?? closeBtn).focus();
+    (nav.querySelector<HTMLElement>('[aria-current="page"]') ?? closeBtn).focus();
   }
   function close() {
     scrim.hidden = true;
@@ -91,6 +244,5 @@ export function settings() {
     get isOpen() {
       return !scrim.hidden;
     },
-    shortcut: `${modKey}+,`,
   };
 }

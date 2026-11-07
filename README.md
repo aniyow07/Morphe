@@ -21,6 +21,9 @@ updating the moment files change.
 - Settings (gear in the title bar, `Ctrl+,` / `⌘,`): light, dark or match the OS, and a theme
   for each: Graphite, Midnight, Ember, Forest and High contrast (dark); Paper, Sand and Mist
   (light). The sun/moon button in the title bar flips between your light and dark theme
+- Settings also cover diff text size, tab width, syntax highlighting, default layout, wrap,
+  how Markdown opens, row density, reduced motion, reopening the last repository on launch,
+  and a list of keyboard shortcuts
 
 ## Keyboard
 

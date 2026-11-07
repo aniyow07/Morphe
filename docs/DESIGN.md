@@ -79,7 +79,7 @@ staged) so it doesn't compete with the status letter.
 ## Components
 
 Title bar (custom on Windows/Linux, overlay traffic lights on macOS) · branch chip · summary stats
-· live dot · light/dark switch (flips to the other base) · settings sheet (mode, plus a dark and a light theme picked from preview cards; alternate themes override surface, text and accent tokens via `data-palette`) · sidebar (filter, toggles, file list with optional folder groups) · file row · resize
+· live dot · light/dark switch (flips to the other base) · settings sheet (sections down the left: Appearance, Diff, General, Shortcuts; display settings set the `--fs-code`, `--lh-code`, `--tab` and `--row-h` tokens; mode, plus a dark and a light theme picked from preview cards; alternate themes override surface, text and accent tokens via `data-palette`) · sidebar (filter, toggles, file list with optional folder groups) · file row · resize
 divider · sticky file header · diff view (hunk header, line row, collapsed-region separator,
 notices for binary / too large / truncated) · side-by-side view (always wraps, hanging indent) ·
 Markdown preview (Diff / Preview switch) · Changes / History switch · branch picker ·

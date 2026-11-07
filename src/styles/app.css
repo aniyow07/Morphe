@@ -970,7 +970,7 @@ kbd {
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0, "calt" 0;
   font-variant-numeric: tabular-nums;
-  tab-size: 4;
+  tab-size: var(--tab, 4);
   user-select: text;
   -webkit-user-select: text;
 }
@@ -1756,7 +1756,8 @@ kbd {
   padding-top: 8vh;
 }
 .set {
-  width: min(620px, 100% - 32px);
+  width: min(760px, 100% - 32px);
+  height: min(640px, 84vh);
   max-height: 84vh;
   display: flex;
   flex-direction: column;
@@ -1777,9 +1778,83 @@ kbd {
   font-size: var(--fs-16);
   font-weight: 600;
 }
+.set-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.set-nav {
+  flex: none;
+  width: 168px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-12) var(--s-8);
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  border-bottom-left-radius: var(--r-float);
+}
+.set-nav button {
+  height: var(--row-h);
+  padding: 0 var(--s-12);
+  border-radius: var(--r-control);
+  text-align: left;
+  color: var(--text-muted);
+  transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+}
+.set-nav button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.set-nav button[aria-current="page"] {
+  background: var(--surface-active);
+  color: var(--text);
+  font-weight: 500;
+}
 .set-body {
+  flex: 1;
+  min-width: 0;
   overflow-y: auto;
   padding: var(--s-16) var(--s-24) var(--s-24);
+}
+.set-row + .set-row {
+  padding-top: var(--s-16);
+}
+.set-row .seg {
+  flex: none;
+}
+.set-keys {
+  width: 100%;
+  border-collapse: collapse;
+}
+.set-keys td {
+  padding: var(--s-8) 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.set-keys td:first-child {
+  width: 46%;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.set-keys td:last-child {
+  color: var(--text);
+}
+@media (max-width: 560px) {
+  .set-main {
+    flex-direction: column;
+  }
+  .set-nav {
+    width: auto;
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+  }
+  .set-row {
+    flex-direction: column;
+  }
 }
 .set-h {
   margin: 0 0 var(--s-12);

@@ -1,5 +1,6 @@
 // Lazy syntax highlighting: highlight.js core, one language chunk loaded per file type.
 import hljs from "highlight.js/lib/core";
+import { state } from "./state";
 
 /** A run of text and the highlight class it belongs to ("" for plain). */
 export type Seg = [text: string, cls: string];
@@ -55,12 +56,14 @@ function keyFor(path: string): string | null {
 
 /** Synchronous: the language name if its grammar is already loaded. */
 export function readyLanguage(path: string): string | null {
+  if (!state.prefs.syntax) return null;
   const k = keyFor(path);
   return k && hljs.getLanguage(LANGS[k][0]) ? LANGS[k][0] : null;
 }
 
 /** Load the grammar for this file type (once). Resolves to its name, or null. */
 export function loadLanguage(path: string): Promise<string | null> {
+  if (!state.prefs.syntax) return Promise.resolve(null);
   const k = keyFor(path);
   if (!k) return Promise.resolve(null);
   let p = loaded.get(k);

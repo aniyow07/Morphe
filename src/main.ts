@@ -268,7 +268,7 @@ const workspace = h("main", { class: "workspace" }, sb.el, divider, dv.el);
 const wl = welcome(openRepo, pickFolder);
 const gone = goneState(pickFolder, () => openRepo(state.root));
 const pal = palette((p) => select(p));
-const prefsSheet = settings();
+const prefsSheet = settings({ refreshDiff: () => dv.refresh() });
 app.append(titlebar(goWelcome, prefsSheet.open), workspace, wl.el, gone.el, pal.el, prefsSheet.el);
 tooltips();
 
@@ -359,7 +359,8 @@ events.onGone((root) => {
 });
 
 (async () => {
-  const launch = await api.launchPath().catch(() => null);
+  let launch = await api.launchPath().catch(() => null);
+  if (!launch && state.prefs.reopenLast) launch = (await api.recentRepos().catch(() => []))[0]?.path ?? null;
   if (launch) await openRepo(launch);
   else {
     state.screen = "welcome";
