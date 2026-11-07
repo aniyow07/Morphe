@@ -93,6 +93,11 @@ fn get_file_text(state: State<AppState>, path: String) -> CmdResult<Option<Strin
 }
 
 #[tauri::command]
+fn list_dir(state: State<AppState>, path: String) -> CmdResult<Vec<git::DirEntry>> {
+    with_session(&state, |s| git::list_dir(&s.repo()?, &path))
+}
+
+#[tauri::command]
 fn list_branches(state: State<AppState>) -> CmdResult<Vec<history::Branch>> {
     with_session(&state, |s| history::branches(&s.repo()?))
 }
@@ -207,6 +212,7 @@ pub fn run() {
             forget_recent,
             launch_path,
             close_repo,
+            list_dir,
             list_branches,
             list_commits,
             open_commit,

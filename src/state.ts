@@ -15,10 +15,12 @@ export interface Prefs {
   mdPreview: boolean;
   split: boolean;
   theme: "system" | "light" | "dark";
+  /** Show every file as a folder tree instead of only the changed ones. */
+  allFiles: boolean;
 }
 
 const PREFS_KEY = "morphe.prefs";
-const defaults: Prefs = { follow: false, hideViewed: false, group: false, wrap: false, sidebarWidth: 300, mdPreview: false, split: false, theme: "system" };
+const defaults: Prefs = { follow: false, hideViewed: false, group: false, wrap: false, sidebarWidth: 300, mdPreview: false, split: false, theme: "system", allFiles: false };
 
 function loadPrefs(): Prefs {
   try {
@@ -141,6 +143,11 @@ function byDirThenName(a: FileEntry, b: FileEntry) {
   const y = splitPath(b.path);
   if (x.dir !== y.dir) return x.dir < y.dir ? -1 : 1;
   return x.name < y.name ? -1 : x.name > y.name ? 1 : 0;
+}
+
+/** The "All files" tree is on display (it applies to the working tree, without a filter). */
+export function treeMode(): boolean {
+  return state.mode === "changes" && state.prefs.allFiles && !state.filter;
 }
 
 /** The commit whose files are on display, or null for the working tree. */

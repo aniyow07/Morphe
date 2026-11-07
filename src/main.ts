@@ -8,8 +8,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, events, type Change, type FileEntry, type Snapshot } from "./api";
 import { h } from "./dom";
-import { afterRender, changed, savePrefs, state, subscribe, viewState, visibleFiles, type Mode } from "./state";
+import { afterRender, changed, savePrefs, state, subscribe, treeMode, viewState, visibleFiles, type Mode } from "./state";
 import { stepCommit } from "./ui/history";
+import { invalidate, resetTree, reveal } from "./ui/tree";
 import { diffView } from "./ui/diffview";
 import { palette } from "./ui/palette";
 import { sidebar, step } from "./ui/sidebar";
@@ -27,6 +28,7 @@ function select(path: string | null) {
   if (state.selected === path) return;
   state.selected = path;
   if (path && state.mode === "changes") state.updated.delete(path);
+  if (path && treeMode()) reveal(path);
   changed();
   dv.show(path, false);
 }
@@ -73,6 +75,7 @@ function applySnapshot(s: Snapshot) {
   state.work = new Map(s.files.map((f) => [f.path, f]));
   state.files = state.work;
   resetHistory();
+  resetTree();
   state.viewed = s.viewed;
   state.updated.clear();
   state.selected = null;
@@ -96,6 +99,7 @@ async function goWelcome() {
   state.work = new Map();
   state.files = state.work;
   resetHistory();
+  resetTree();
   state.selected = null;
   changed();
   dv.show(null, false);
@@ -114,6 +118,8 @@ function onChange(c: Change) {
     state.work.set(entry.path, entry);
     if (contentChanged) touched.push(entry);
   }
+  // Files that appeared or vanished change folder listings in the "All files" tree.
+  invalidate(c.removed.concat(c.upserts.filter((u) => u.status !== "M").map((u) => u.path)));
   if (state.mode === "history") {
     // The commit on display doesn't change; keep the working tree current for later.
     for (const f of touched) state.updated.add(f.path);
@@ -127,6 +133,8 @@ function onChange(c: Change) {
   const sel = state.selected;
   if (state.prefs.follow && touched.length) {
     select(mostRecent(touched)!.path);
+  } else if (sel && !state.files.has(sel) && treeMode()) {
+    if (c.removed.includes(sel)) dv.show(sel, true); // reverted: now an unchanged file
   } else if (sel && !state.files.has(sel)) {
     select(visibleFiles()[0]?.path ?? null);
   } else if (sel && touched.some((f) => f.path === sel)) {
@@ -321,6 +329,10 @@ document.addEventListener("keydown", (e) => {
 
 document.addEventListener("morphe:pref", (e) => {
   const key = (e as CustomEvent<string>).detail;
+  if (key === "allFiles" && state.prefs.allFiles && state.selected) reveal(state.selected);
+  if (key === "allFiles" && !state.prefs.allFiles && state.selected && !state.files.has(state.selected)) {
+    select(visibleFiles()[0]?.path ?? null);
+  }
   if (key === "follow" && state.prefs.follow && state.mode === "changes") {
     const f = mostRecent(Array.from(state.files.values()));
     if (f) select(f.path);

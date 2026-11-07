@@ -7,7 +7,7 @@ import { source, type FileDiff, type FileEntry, type Hunk, type Line } from "../
 import { esc, fmt, h, icon, modKey, STATUS_LABEL } from "../dom";
 import { highlightLines, loadLanguage, readyLanguage, type Seg } from "../highlight";
 import { isMarkdown, renderMarkdown } from "../markdown";
-import { changed, savePrefs, shownCommit, splitPath, state, viewState } from "../state";
+import { changed, savePrefs, shownCommit, splitPath, state, treeMode, viewState } from "../state";
 
 const CHUNK = 200;
 const ROW_H = 20;
@@ -39,7 +39,8 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
   const el = h("section", { class: "pane" }, header, scroller);
 
   let gen = 0;
-  let current: { path: string; commit: string | null; diff: FileDiff | null; mode: "diff" | "preview" } | null = null;
+  /** `plain`: an unchanged file opened from the "All files" tree, shown as its contents. */
+  let current: { path: string; commit: string | null; diff: FileDiff | null; mode: "diff" | "preview"; plain: boolean } | null = null;
   let chunks: Chunk[] = [];
   let headerHtml = "";
   let hl: { lang: string; sides: Map<number, { old: Seg[][]; neu: Seg[][]; oi: number[]; ni: number[] }> } | null = null;
@@ -99,6 +100,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
 
   /** Render the header for the current selection (cheap; runs on every state change). */
   function renderHeader() {
+    if (current?.plain) return renderPlainHeader(current.path);
     const f = current && state.files.get(current.path);
     header.hidden = !f;
     if (!f) return;
@@ -141,22 +143,41 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
     if (html !== headerHtml) header.innerHTML = headerHtml = html;
   }
 
+  function renderPlainHeader(path: string) {
+    header.hidden = false;
+    const { dir, name } = splitPath(path);
+    const html =
+      `<span class="st"></span>` +
+      `<span class="fh-path" title="${esc(path)}">${dir ? `<span class="dr">${esc(dir)}/</span>` : ""}<span class="fn">${esc(name)}</span></span>` +
+      `<span class="fh-tags"><span class="tag">Unchanged</span></span><span class="fh-counts"></span>` +
+      `<span class="fh-tools">` +
+      (isMarkdown(path)
+        ? `<span class="seg" role="group" aria-label="View mode"><button data-mode="diff" aria-pressed="${!state.prefs.mdPreview}" data-tip="Show source">${icon.code}<span>Source</span></button><button data-mode="preview" aria-pressed="${state.prefs.mdPreview}" data-tip="Show rendered Markdown">${icon.preview}<span>Preview</span></button></span>`
+        : "") +
+      (current!.mode === "diff"
+        ? `<button class="tgl wrap-tgl" aria-pressed="${state.prefs.wrap}" aria-label="Wrap long lines" data-tip="Wrap long lines">${icon.wrap}</button>`
+        : "") +
+      `</span>`;
+    if (html !== headerHtml) header.innerHTML = headerHtml = html;
+  }
+
   /** Show `path`. With `refresh`, keep the scroll position anchored to the same line. */
   async function show(path: string | null, refresh: boolean) {
     const my = ++gen;
-    if (!path || !state.files.has(path)) {
+    if (!path || (!state.files.has(path) && !treeMode())) {
       current = null;
       renderHeader();
       renderEmpty();
       return;
     }
-    const f = state.files.get(path)!;
+    const f = state.files.get(path) ?? null;
+    const plain = !f;
     const commit = shownCommit();
-    const mode = isMarkdown(path) && state.prefs.mdPreview && f.kind === "text" ? "preview" : "diff";
-    const same = current?.path === path && current.mode === mode && current.commit === commit;
+    const mode = isMarkdown(path) && state.prefs.mdPreview && (plain || f!.kind === "text") ? "preview" : "diff";
+    const same = current?.path === path && current.mode === mode && current.commit === commit && current.plain === plain;
     const anchor = refresh && same ? captureAnchor() : null;
     const keepTop = refresh && same ? scroller.scrollTop : 0;
-    current = { path, commit, diff: same ? current!.diff : null, mode };
+    current = { path, commit, diff: same ? current!.diff : null, mode, plain };
     renderHeader();
 
     // Only show the skeleton when loading is actually slow, and never on live refreshes.
@@ -173,6 +194,24 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
           : h("article", { class: "md-preview", html: renderMarkdown(text) }),
       );
       scroller.scrollTop = keepTop;
+      return;
+    }
+
+    if (!f) {
+      const text = await source.text(path, null).catch(() => null);
+      clearTimeout(skel);
+      if (my !== gen) return;
+      renderPlain(path, text);
+      if (anchor) restoreAnchor(anchor);
+      else if (!same) scroller.scrollTop = 0;
+      if (text != null && !readyLanguage(path) && text.length < 2_000_000) {
+        const lang = await loadLanguage(path);
+        if (lang && my === gen) {
+          const a = captureAnchor();
+          renderPlain(path, text);
+          if (a) restoreAnchor(a);
+        }
+      }
       return;
     }
 
@@ -296,6 +335,25 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
     else fillVisible();
   }
 
+  /** An unchanged file: its lines with new-side numbers, no diff markers. */
+  function renderPlain(path: string, text: string | null) {
+    resetBody();
+    if (text == null) return scroller.append(notice("Binary or larger than 2 MB, so there's nothing to show here."));
+    if (text === "") return scroller.append(notice("Empty file."));
+    const texts = text.split("\n").map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l));
+    if (texts[texts.length - 1] === "") texts.pop();
+    const lang = texts.length <= HIGHLIGHT_MAX_LINES ? readyLanguage(path) : null;
+    const segs = lang ? highlightLines(texts, lang) : null;
+    const rows: Row[] = texts.map((t, i) => ({ a: { k: " ", n: i + 1, t } }));
+    const body = h("div", { class: "diff plain", role: "table", "aria-label": path });
+    for (let off = 0; off < rows.length; off += CHUNK) {
+      body.append(addChunk(rows.slice(off, off + CHUNK), segs ? segs.slice(off, off + CHUNK) : null, -1).el);
+    }
+    scroller.append(body);
+    if (state.prefs.wrap && rows.length <= EAGER_WRAP_LINES) chunks.forEach(fill);
+    else fillVisible();
+  }
+
   function addChunk(rows: Row[], segs: (Seg[] | null)[] | null, hunk: number): Chunk {
     const c: Chunk = { el: h("div", { class: "chunk" }), rows, segs, hunk, filled: false };
     c.el.style.height = `${rows.length * ROW_H}px`;
@@ -351,7 +409,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
     };
     let html = "";
     c.rows.forEach((r, i) => {
-      html += state.prefs.split
+      html += state.prefs.split && !current?.plain
         ? splitRowHtml(r.a, seg(r.a, r.aj, i), r.b, seg(r.b, r.bj, i))
         : rowHtml(r.a!, seg(r.a, r.aj, i));
     });

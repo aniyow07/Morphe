@@ -61,6 +61,11 @@ export interface Change {
   branch: string;
 }
 
+export interface DirEntry {
+  name: string;
+  dir: boolean;
+}
+
 export interface Branch {
   /** Short name, or "HEAD" for a detached HEAD. */
   name: string;
@@ -98,6 +103,7 @@ export const api = {
   recentRepos: () => invoke<Recent[]>("recent_repos"),
   forgetRecent: (path: string) => invoke<void>("forget_recent", { path }),
   launchPath: () => invoke<string | null>("launch_path"),
+  listDir: (path: string) => invoke<DirEntry[]>("list_dir", { path }),
   listBranches: () => invoke<Branch[]>("list_branches"),
   listCommits: (branch: string | null, skip: number, limit: number) => invoke<CommitInfo[]>("list_commits", { branch, skip, limit }),
   openCommit: (id: string) => invoke<CommitChanges>("open_commit", { id }),

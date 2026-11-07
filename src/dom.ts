@@ -35,6 +35,7 @@ export const icon = {
   search: svg('<circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/>', 14),
   follow: svg('<circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.75" fill="currentColor" stroke="none"/>', 14),
   eyeOff: svg('<path d="M2 8s2.2-4.5 6-4.5S14 8 14 8s-2.2 4.5-6 4.5S2 8 2 8z"/><circle cx="8" cy="8" r="1.75"/><path d="M2.5 13.5l11-11"/>', 14),
+  tree: svg('<path d="M3 2.5v9.5h3.5M3 6.5h3.5"/><rect x="7.5" y="4.5" width="6" height="4" rx="1"/><rect x="7.5" y="10" width="6" height="4" rx="1"/>', 14),
   group: svg('<path d="M2.5 3.5h5M5 6.5h8.5M5 9.5h8.5M2.5 12.5h5M2.5 3.5v9"/>', 14),
   wrap: svg('<path d="M2.5 4h11M2.5 8h9a2 2 0 010 4H8.5M2.5 12h3M10 10.5L8.5 12l1.5 1.5"/>', 14),
   split: svg('<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M8 2.5v11"/>', 14),

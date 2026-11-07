@@ -15,6 +15,9 @@ updating the moment files change.
 - History: any local branch's commits, newest first, loaded 100 at a time as you scroll.
   Selecting a commit shows its changes against its first parent in the same file list and diff
   view (unified, side by side, Markdown preview)
+- "All files": the whole working tree as a folder tree (loaded one folder at a time, ignored
+  files left out), changed files in their status color and folders showing how many changes
+  they hold. Unchanged files open read-only; J / K still step through changed files only
 - Light, dark, or follow the OS
 
 ## Keyboard

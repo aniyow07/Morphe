@@ -41,7 +41,25 @@ fn main() {
         }
         opened.insert(c.id.clone(), serde_json::json!({ "changes": data.changes, "diffs": cdiffs, "texts": ctexts }));
     }
+    // Every folder listing (and unchanged file texts) for the "All files" tree.
+    let mut dirs = serde_json::Map::new();
+    let mut stack = vec![String::new()];
+    while let Some(d) = stack.pop() {
+        let entries = git::list_dir(&repo, &d).unwrap_or_default();
+        for e in &entries {
+            let p = if d.is_empty() { e.name.clone() } else { format!("{d}/{}", e.name) };
+            if e.dir {
+                stack.push(p);
+            } else if !texts.contains_key(&p) {
+                if let Ok(Some(t)) = git::file_text(&repo, &p) {
+                    texts.insert(p, t.into());
+                }
+            }
+        }
+        dirs.insert(d, serde_json::to_value(entries).unwrap());
+    }
     let out = serde_json::json!({
+        "dirs": dirs,
         "snapshot": { "root": root, "name": name, "branch": git::branch_name(&repo), "files": files, "viewed": {} },
         "diffs": diffs,
         "texts": texts,

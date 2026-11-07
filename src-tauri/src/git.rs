@@ -398,6 +398,45 @@ pub(crate) fn text_of(bytes: Vec<u8>) -> Option<String> {
     Some(String::from_utf8(bytes).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned()))
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DirEntry {
+    pub name: String,
+    pub dir: bool,
+}
+
+/// One working-tree directory's entries for the "All files" tree: folders first, then files,
+/// without `.git` and without ignored paths (unless git tracks them anyway).
+pub fn list_dir(repo: &Repository, rel: &str) -> Result<Vec<DirEntry>, git2::Error> {
+    let workdir = repo.workdir().ok_or_else(|| git2::Error::from_str("bare repository"))?;
+    let index = repo.index()?;
+    let read = std::fs::read_dir(workdir.join(rel)).map_err(|e| git2::Error::from_str(&e.to_string()))?;
+    let mut out = Vec::new();
+    for e in read.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if name == ".git" {
+            continue;
+        }
+        let dir = e.file_type().is_ok_and(|t| t.is_dir());
+        let path = if rel.is_empty() { name.clone() } else { format!("{rel}/{name}") };
+        // A trailing slash lets directory-only rules like `build/` match.
+        let ignored = repo.is_path_ignored(if dir { format!("{path}/") } else { path.clone() }).unwrap_or(false);
+        let tracked = || {
+            if dir {
+                let prefix = format!("{path}/");
+                index.find_prefix(prefix.as_str()).is_ok()
+            } else {
+                index.get_path(Path::new(&path), 0).is_some()
+            }
+        };
+        if !ignored || tracked() {
+            out.push(DirEntry { name, dir });
+        }
+    }
+    out.sort_by(|a, b| b.dir.cmp(&a.dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    Ok(out)
+}
+
 /// Short name of the current branch, also for unborn branches and detached HEAD.
 pub fn branch_name(repo: &Repository) -> String {
     match repo.head() {

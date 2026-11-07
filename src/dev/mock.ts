@@ -2,7 +2,8 @@
 // Load http://localhost:1420/?mock after dumping a fixture (see src-tauri/examples/dump.rs).
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
-import { state } from "../state";
+import { changed, state } from "../state";
+import { tree } from "../ui/tree";
 
 export async function installMock() {
   const name = new URLSearchParams(location.search).get("fixture") ?? "fixture";
@@ -22,6 +23,8 @@ export async function installMock() {
           return lines(args.path).slice(args.start - 1, args.end);
         case "get_file_text":
           return fx.texts[args.path] ?? null;
+        case "list_dir":
+          return fx.dirs?.[args.path] ?? [];
         case "list_branches":
           return fx.branches ?? [];
         case "list_commits":
@@ -60,6 +63,7 @@ export async function installMock() {
     split: q.has("split"),
     wrap: q.has("wrap"),
     group: q.has("group"),
+    allFiles: q.has("all"),
     hideViewed: q.has("hide"),
     follow: q.has("follow"),
     sidebarWidth: Number(q.get("sidebar") ?? 300),
@@ -74,6 +78,9 @@ export async function installMock() {
       await new Promise((r) => setTimeout(r, 300));
       if (q.has("branches")) document.querySelector<HTMLElement>(".branch-btn")?.click();
     }
+    for (const d of (q.get("open") ?? "").split(",").filter(Boolean)) tree.open.add(d);
+    if (q.get("open")) changed();
+    if (q.get("open")) await new Promise((r) => setTimeout(r, 300));
     const sel = q.get("select");
     if (sel) document.querySelector<HTMLElement>(`.row[data-path="${CSS.escape(sel)}"]`)?.click();
     await new Promise((r) => setTimeout(r, 400));

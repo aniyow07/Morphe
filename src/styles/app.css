@@ -1664,3 +1664,88 @@ kbd {
 .sidebar.is-history .sb-tools {
   display: none;
 }
+
+/* ---------- "All files" tree ---------- */
+
+.trow {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  height: 26px;
+  padding-right: var(--s-6);
+  border-radius: var(--r-control);
+  white-space: nowrap;
+  cursor: default;
+}
+.tdir {
+  color: var(--text-muted);
+}
+.tdir:hover,
+.tfile:hover {
+  background: var(--surface-hover);
+}
+.tdir .chev {
+  display: flex;
+  color: var(--text-faint);
+  transition: transform var(--t-fast) var(--ease-out);
+}
+.tdir.open .chev {
+  transform: rotate(90deg);
+}
+.tdir.has-changes {
+  color: var(--text);
+}
+.tn {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tcount {
+  font-size: var(--fs-11);
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-radius: var(--r-badge);
+  padding: 0 var(--s-6);
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.tfile {
+  color: var(--text-muted);
+}
+.tfile .st {
+  margin-left: 4px;
+}
+.tfile.changed .tn {
+  font-weight: 500;
+}
+.tfile.c-M .tn,
+.tfile.c-T .tn {
+  color: var(--st-m);
+}
+.tfile.c-A .tn {
+  color: var(--st-a);
+}
+.tfile.c-D .tn {
+  color: var(--st-d);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.tfile.c-U .tn {
+  color: var(--st-u);
+}
+.tfile.c-R .tn {
+  color: var(--st-r);
+}
+.tnote {
+  color: var(--text-faint);
+  font-size: var(--fs-12);
+}
+
+/* an unchanged file: one line-number column */
+.diff.plain .ln .no:first-child {
+  display: none;
+}
+.diff.plain .ln .no + .no {
+  left: 0;
+}

@@ -3,8 +3,9 @@
 // selected commit's files.
 import type { FileEntry } from "../api";
 import { esc, fmt, h, icon, modKey, STATUS_LABEL } from "../dom";
-import { changed, savePrefs, splitPath, state, subscribe, viewState, visibleFiles, type Mode, type Prefs } from "../state";
+import { changed, savePrefs, splitPath, state, subscribe, treeMode, viewState, visibleFiles, type Mode, type Prefs } from "../state";
 import { historyPanel, type HistoryActions } from "./history";
+import { toggleDir, treeRows } from "./tree";
 
 export interface SidebarActions extends HistoryActions {
   select: (path: string) => void;
@@ -56,6 +57,7 @@ export function sidebar(actions: SidebarActions) {
     return { b, key };
   };
   const toggles = [
+    toggle("allFiles", icon.tree, "Show all files"),
     toggle("follow", icon.follow, "Follow latest edit"),
     toggle("hideViewed", icon.eyeOff, "Hide viewed files"),
     toggle("group", icon.group, "Group by folder"),
@@ -81,6 +83,8 @@ export function sidebar(actions: SidebarActions) {
 
   list.addEventListener("click", (e) => {
     const t = e.target as HTMLElement;
+    const dir = t.closest<HTMLElement>(".tdir");
+    if (dir) return toggleDir(dir.dataset.dir!);
     const grp = t.closest<HTMLElement>(".grp");
     if (grp) {
       const dir = grp.dataset.dir!;
@@ -112,7 +116,8 @@ export function sidebar(actions: SidebarActions) {
     list.setAttribute("aria-label", historyMode ? "Files in this commit" : "Changed files");
     for (const t of toggles) {
       t.b.setAttribute("aria-pressed", String(state.prefs[t.key]));
-      t.b.hidden = historyMode && t.key !== "group"; // follow and viewed are about the working tree
+      // Follow and viewed are about the working tree; grouping and hiding don't apply to the tree.
+      t.b.hidden = historyMode ? t.key !== "group" : state.prefs.allFiles && (t.key === "group" || t.key === "hideViewed");
     }
     if (filter.value !== state.filter) filter.value = state.filter;
 
@@ -125,6 +130,19 @@ export function sidebar(actions: SidebarActions) {
       return;
     }
     list.querySelectorAll(".sk-row").forEach((n) => n.remove());
+
+    if (treeMode()) {
+      reconcile(treeRows());
+      emptyNote.hidden = true;
+      const sel = list.querySelector<HTMLElement>('.tfile[aria-selected="true"]');
+      if (sel) {
+        list.setAttribute("aria-activedescendant", sel.id);
+        if (state.selected !== lastRevealed) sel.scrollIntoView({ block: "nearest" });
+      }
+      lastRevealed = state.selected;
+      return;
+    }
+    lastRevealed = null;
 
     const files = visibleFiles();
     const nodes: HTMLElement[] = [];
@@ -142,12 +160,7 @@ export function sidebar(actions: SidebarActions) {
       nodes.push(fileRow(f));
     }
 
-    // Reconcile in place so hover, focus and running animations survive updates.
-    const keep = new Set(nodes);
-    for (const child of Array.from(list.children)) if (!keep.has(child as HTMLElement)) child.remove();
-    nodes.forEach((n, i) => {
-      if (list.children[i] !== n) list.insertBefore(n, list.children[i] ?? null);
-    });
+    reconcile(nodes);
     for (const p of rows.keys()) if (!state.files.has(p)) (rows.delete(p), sigs.delete(p));
 
     emptyNote.hidden = files.length > 0 || state.files.size === 0;
@@ -161,6 +174,16 @@ export function sidebar(actions: SidebarActions) {
     const sel = state.selected && rows.get(state.selected);
     if (sel && sel.isConnected) sel.scrollIntoView({ block: "nearest" });
   });
+
+  /** Reconcile in place so hover, focus and running animations survive updates. */
+  function reconcile(nodes: HTMLElement[]) {
+    const keep = new Set(nodes);
+    for (const child of Array.from(list.children)) if (!keep.has(child as HTMLElement)) child.remove();
+    nodes.forEach((n, i) => {
+      if (list.children[i] !== n) list.insertBefore(n, list.children[i] ?? null);
+    });
+  }
+  let lastRevealed: string | null = null;
 
   function groupRow(dir: string, count: number) {
     let g = groups.get(dir);

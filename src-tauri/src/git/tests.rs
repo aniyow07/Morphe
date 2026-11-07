@@ -305,3 +305,19 @@ fn state_key_ignores_stat_refresh_but_not_staging() {
     f.commit_all();
     assert_ne!(state_key(&f.repo).unwrap(), staged);
 }
+
+#[test]
+fn list_dir_skips_ignored_but_keeps_tracked() {
+    let f = Fixture::new();
+    f.write(".gitignore", "build/\n*.log\n");
+    f.write("src/main.rs", "fn main() {}\n");
+    f.write("keep.log", "tracked on purpose\n");
+    f.stage("keep.log");
+    f.write("build/out.o", "x");
+    f.write("debug.log", "x");
+    f.write("Zeta.txt", "z");
+    let names: Vec<(String, bool)> = list_dir(&f.repo, "").unwrap().into_iter().map(|e| (e.name, e.dir)).collect();
+    let expect = [("src", true), (".gitignore", false), ("keep.log", false), ("Zeta.txt", false)];
+    assert_eq!(names, expect.map(|(n, d)| (n.to_string(), d)));
+    assert_eq!(list_dir(&f.repo, "src").unwrap(), [DirEntry { name: "main.rs".into(), dir: false }]);
+}
