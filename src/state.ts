@@ -69,6 +69,8 @@ export const state = {
     /** The selected commit, once loaded. */
     open: null as CommitChanges | null,
     selected: null as string | null,
+    /** The sidebar shows the selected commit (its files) instead of the commit list. */
+    detail: false,
   },
   filter: "",
   /** Files updated live since the user last looked at them. */

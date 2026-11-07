@@ -138,6 +138,7 @@ export function sidebar(actions: SidebarActions) {
   subscribe(() => {
     const historyMode = state.mode === "history";
     root.classList.toggle("is-history", historyMode);
+    root.classList.toggle("is-commit", historyMode && state.history.detail);
     for (const [mode, b] of Object.entries(modes)) b.setAttribute("aria-pressed", String(state.mode === mode));
     modes.changes.lastElementChild!.textContent = state.work.size ? fmt.format(state.work.size) : "";
     list.setAttribute("aria-label", historyMode ? "Files in this commit" : "Changed files");

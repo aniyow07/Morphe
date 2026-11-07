@@ -32,6 +32,7 @@ export const icon = {
   folder: svg('<path d="M2 4.5c0-.8.7-1.5 1.5-1.5h3l1.5 1.5h4.5c.8 0 1.5.7 1.5 1.5v5.5c0 .8-.7 1.5-1.5 1.5h-9c-.8 0-1.5-.7-1.5-1.5z"/>'),
   chevron: svg('<path d="M6 4l4 4-4 4"/>', 12),
   check: svg('<path d="M3.5 8.5l3 3 6-7"/>', 12),
+  back: svg('<path d="M10 3.5L5.5 8l4.5 4.5"/>', 14),
   up: svg('<path d="M4 10l4-4 4 4"/>', 14),
   down: svg('<path d="M4 6l4 4 4-4"/>', 14),
   external: svg('<path d="M9 2.5h4.5V7M13.5 2.5L7.5 8.5M12 9.5v3.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-8a.5.5 0 0 1 .5-.5H7"/>', 14),

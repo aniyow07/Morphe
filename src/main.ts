@@ -164,7 +164,7 @@ let commitGen = 0;
 function resetHistory() {
   historyGen++;
   commitGen++;
-  Object.assign(state.history, { branches: [], branch: null, commits: [], done: false, loading: false, open: null, selected: null });
+  Object.assign(state.history, { branches: [], branch: null, commits: [], done: false, loading: false, open: null, selected: null, detail: false });
   workSelected = historySelected = null;
 }
 
@@ -240,7 +240,7 @@ function setBranch(name: string | null) {
   const H = state.history;
   if (H.branch === name) return;
   commitGen++;
-  Object.assign(H, { branch: name, commits: [], done: false, open: null, selected: null });
+  Object.assign(H, { branch: name, commits: [], done: false, open: null, selected: null, detail: false });
   state.files = new Map();
   state.selected = null;
   changed();
@@ -368,7 +368,11 @@ document.addEventListener("keydown", (e) => {
   }
   const t = e.target as HTMLElement;
   if (e.ctrlKey || e.metaKey || e.altKey || t.matches("input, textarea") || state.screen !== "repo") return;
-  if (state.mode === "history" && e.shiftKey && (k === "j" || k === "k")) stepCommit(k === "j" ? 1 : -1, historyActions);
+  if (e.key === "Escape" && state.mode === "history" && state.history.detail) {
+    state.history.detail = false;
+    changed();
+    requestAnimationFrame(() => sb.focusCommits());
+  } else if (state.mode === "history" && e.shiftKey && (k === "j" || k === "k")) stepCommit(k === "j" ? 1 : -1, historyActions);
   else if (k === "j") step(1, select);
   else if (k === "k") step(-1, select);
   else if (k === "v" && state.selected) toggleViewed(state.selected);

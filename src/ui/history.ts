@@ -1,8 +1,8 @@
 // History panel in the sidebar: branch picker, the paged commit list, and the selected
 // commit's message. The commit's files use the regular file list below it.
 import type { CommitInfo } from "../api";
-import { esc, h, icon } from "../dom";
-import { state, subscribe } from "../state";
+import { esc, fmt, h, icon } from "../dom";
+import { changed, state, subscribe } from "../state";
 
 export interface HistoryActions {
   selectCommit: (id: string) => void;
@@ -82,14 +82,22 @@ export function historyPanel(actions: HistoryActions) {
   }
 
   // ---- commit list ----
+  const openDetail = (open: boolean) => {
+    state.history.detail = open;
+    changed();
+    if (!open) requestAnimationFrame(() => list.focus());
+  };
   list.addEventListener("click", (e) => {
     const row = (e.target as HTMLElement).closest<HTMLElement>(".crow");
-    if (row) actions.selectCommit(row.dataset.id!);
+    if (!row) return;
+    if (state.history.selected !== row.dataset.id) actions.selectCommit(row.dataset.id!);
+    openDetail(true);
   });
   list.addEventListener("keydown", (e) => {
-    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    if (e.key === "Enter" && state.history.selected) openDetail(true);
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") stepCommit(e.key === "ArrowDown" ? 1 : -1, actions);
+    else return;
     e.preventDefault();
-    stepCommit(e.key === "ArrowDown" ? 1 : -1, actions);
   });
   scroll.addEventListener(
     "scroll",
@@ -99,12 +107,17 @@ export function historyPanel(actions: HistoryActions) {
     { passive: true },
   );
   head.addEventListener("click", (e) => {
-    if ((e.target as HTMLElement).closest(".ch-body")) head.classList.toggle("expanded");
+    const t = e.target as HTMLElement;
+    if (t.closest(".ch-back")) openDetail(false);
+    else if (t.closest(".ch-prev")) stepCommit(-1, actions);
+    else if (t.closest(".ch-next")) stepCommit(1, actions);
+    else if (t.closest(".ch-body")) head.classList.toggle("expanded");
   });
 
   let rendered: CommitInfo[] = [];
   let selectedRow: HTMLElement | null = null;
   let headId = "";
+  let lastDay = "";
 
   subscribe(() => {
     const H = state.history;
@@ -121,10 +134,16 @@ export function historyPanel(actions: HistoryActions) {
       list.replaceChildren();
       rendered = [];
       selectedRow = null;
+      lastDay = "";
     }
     if (H.commits.length > rendered.length) {
       const frag = document.createDocumentFragment();
-      for (const c of H.commits.slice(rendered.length)) frag.append(commitRow(c));
+      for (const c of H.commits.slice(rendered.length)) {
+        const day = dayLabel(c.time);
+        if (day !== lastDay) frag.append(h("div", { class: "c-day", role: "presentation" }, day));
+        lastDay = day;
+        frag.append(commitRow(c));
+      }
       list.append(frag);
       rendered = H.commits.slice();
     }
@@ -134,7 +153,7 @@ export function historyPanel(actions: HistoryActions) {
       sel?.setAttribute("aria-selected", "true");
       if (sel) {
         list.setAttribute("aria-activedescendant", sel.id);
-        sel.scrollIntoView({ block: "nearest" });
+        if (!H.detail) sel.scrollIntoView({ block: "nearest" });
       }
       selectedRow = sel;
     }
@@ -142,16 +161,27 @@ export function historyPanel(actions: HistoryActions) {
     more.hidden = !more.textContent;
 
     const open = H.open;
-    head.hidden = !open;
-    if (open && open.commit.id !== headId) {
-      headId = open.commit.id;
+    head.hidden = !open || !H.detail;
+    const i = H.commits.findIndex((c) => c.id === H.selected);
+    const navKey = `${open?.commit.id}|${i <= 0}|${i >= H.commits.length - 1 && H.done}`;
+    if (open && navKey !== headId) {
+      headId = navKey;
       head.classList.remove("expanded");
       const c = open.commit;
+      const add = open.files.reduce((n, f) => n + f.additions, 0);
+      const del = open.files.reduce((n, f) => n + f.deletions, 0);
+      const n = open.files.length;
       head.innerHTML =
+        `<div class="ch-nav"><button class="ch-back" data-tip="Back to commits" data-kbd="Esc">${icon.back}<span>Commits</span></button>` +
+        `<span class="ch-steps"><button class="tgl ch-prev" aria-label="Newer commit" data-tip="Newer commit" data-kbd="Shift+K"${i <= 0 ? " disabled" : ""}>${icon.up}</button>` +
+        `<button class="tgl ch-next" aria-label="Older commit" data-tip="Older commit" data-kbd="Shift+J"${i >= H.commits.length - 1 && H.done ? " disabled" : ""}>${icon.down}</button></span></div>` +
         `<div class="ch-sum">${esc(c.summary || "(no message)")}</div>` +
         (open.body ? `<div class="ch-body" data-tip="Show the full message">${esc(open.body)}</div>` : "") +
         `<div class="ch-meta"><span class="c-sha">${c.id.slice(0, 7)}</span><span class="ch-author">${esc(c.author)}</span>` +
-        `<span class="ch-date">${fullDate.format(new Date(c.time * 1000))}</span></div>`;
+        `<span class="ch-date">${fullDate.format(new Date(c.time * 1000))}</span></div>` +
+        `<div class="ch-stats">${fmt.format(n)} ${n === 1 ? "file" : "files"}` +
+        `<span class="ch-add">+${fmt.format(add)}</span><span class="ch-del">−${fmt.format(del)}</span>` +
+        `${c.parents > 1 ? `<span class="c-merge">merge, vs first parent</span>` : ""}</div>`;
     }
   });
 
@@ -176,6 +206,17 @@ export function historyPanel(actions: HistoryActions) {
       list.focus();
     },
   };
+}
+
+/** "Today", "Yesterday", a weekday within the week, else a date. */
+function dayLabel(sec: number): string {
+  const d = new Date(sec * 1000);
+  const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((start(new Date()) - start(d)) / 864e5);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return d.toLocaleDateString(undefined, { weekday: "long" });
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
 }
 
 /** The branch whose log is listed (the current one unless another was picked). */

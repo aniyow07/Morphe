@@ -582,7 +582,20 @@ kbd {
   padding-top: var(--s-8);
 }
 .sidebar.is-history .file-list {
-  flex: 1.2 1 0;
+  flex: 1 1 0;
+}
+/* History is two steps: the commit list fills the sidebar; opening a commit swaps it for
+   the commit's header and its files. */
+.sidebar.is-history:not(.is-commit) > .sb-head,
+.sidebar.is-history:not(.is-commit) > .file-list,
+.sidebar.is-history:not(.is-commit) > .list-note,
+.sidebar.is-commit .hist-bar,
+.sidebar.is-commit .commit-scroll {
+  display: none;
+}
+.sidebar.is-commit .hist {
+  flex: none;
+  min-height: 0;
 }
 
 .hist-bar {
@@ -683,9 +696,10 @@ kbd {
   box-shadow: none;
 }
 .crow {
+  position: relative;
   display: grid;
   gap: 1px;
-  padding: 5px var(--s-8) 6px;
+  padding: 6px var(--s-8) 7px 26px;
   border-radius: var(--r-control);
   cursor: default;
   /* cheap virtualization for long histories */
@@ -694,6 +708,48 @@ kbd {
 }
 .crow:hover {
   background: var(--surface-hover);
+}
+/* timeline: a rail through the list, a dot per commit (hollow for merges) */
+.crow::before,
+.c-day::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-strong);
+}
+.crow::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 12px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  box-shadow: 0 0 0 2px var(--bg-sidebar);
+}
+.crow:has(.c-merge)::after {
+  background: var(--bg-sidebar);
+  box-shadow: inset 0 0 0 1.5px var(--text-faint), 0 0 0 2px var(--bg-sidebar);
+}
+.crow[aria-selected="true"]::after {
+  background: var(--accent);
+}
+.c-day {
+  position: relative;
+  padding: var(--s-12) var(--s-8) var(--s-4) 26px;
+  font-size: var(--fs-12);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.c-day:first-child {
+  padding-top: var(--s-4);
+}
+.c-day:first-child::before {
+  top: 50%;
 }
 .crow[aria-selected="true"] {
   background: var(--surface-active);
@@ -747,12 +803,53 @@ kbd {
 
 .commit-head {
   display: grid;
+  gap: var(--s-6);
+  padding: var(--s-4) var(--s-16) var(--s-12);
+  border-bottom: 1px solid var(--border);
+}
+.ch-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 calc(-1 * var(--s-8)) var(--s-4);
+}
+.ch-back {
+  display: flex;
+  align-items: center;
   gap: var(--s-4);
-  padding: var(--s-12) var(--s-16) var(--s-2);
-  border-top: 1px solid var(--border);
+  height: 26px;
+  padding: 0 var(--s-8) 0 var(--s-4);
+  border-radius: var(--r-control);
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+  transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+}
+.ch-back:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.ch-steps {
+  display: flex;
+  gap: var(--s-2);
+}
+.ch-stats {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-8);
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.ch-add {
+  color: var(--add-sign);
+}
+.ch-del {
+  color: var(--del-sign);
 }
 .ch-sum {
-  font-weight: 500;
+  font-size: var(--fs-14);
+  font-weight: 600;
+  line-height: 1.35;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
@@ -765,7 +862,7 @@ kbd {
   overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 4;
   overflow: hidden;
   cursor: pointer;
 }
