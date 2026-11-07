@@ -15,8 +15,10 @@ const MAX_PATHS_PER_BATCH: usize = 400;
 
 #[derive(Debug, Default)]
 pub struct Batch {
-    /// Index, HEAD, refs or ignore rules changed: rescan everything.
+    /// Ignore rules changed, or too many paths to list: rescan everything.
     pub full: bool,
+    /// Index, HEAD or refs changed: staging, a commit, a branch switch, or just a stat refresh.
+    pub git: bool,
     /// Working-tree paths (relative, forward slashes) to rescan.
     pub paths: Vec<String>,
     /// The repository disappeared (deleted or moved).
@@ -31,7 +33,7 @@ pub fn start(root: PathBuf, git_dir: PathBuf, on_batch: impl Fn(Batch) + Send + 
             Err(_) => Batch { full: true, ..Default::default() },
         };
         let batch = if !r.exists() || !g.exists() { Batch { gone: true, ..Default::default() } } else { batch };
-        if batch.gone || batch.full || !batch.paths.is_empty() {
+        if batch.gone || batch.full || batch.git || !batch.paths.is_empty() {
             on_batch(batch);
         }
     })?;
@@ -61,7 +63,7 @@ fn classify<'a>(root: &Path, git_dir: &Path, paths: impl Iterator<Item = &'a Pat
     let mut work = BTreeSet::new();
     for p in paths {
         if let Ok(rel) = p.strip_prefix(git_dir) {
-            batch.full |= is_git_state(rel);
+            batch.git |= is_git_state(rel);
             continue;
         }
         let Ok(rel) = p.strip_prefix(root) else { continue };

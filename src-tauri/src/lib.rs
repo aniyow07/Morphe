@@ -45,7 +45,17 @@ fn on_batch(app: &AppHandle, shared: &Mutex<Option<Session>>, batch: watch::Batc
         let _ = app.emit("repo:gone", session.root.to_string_lossy());
         return;
     }
-    let result = if batch.full { session.full_rescan() } else { session.rescan_paths(batch.paths) };
+    let refs_moved = batch.git && session.refs_changed();
+    let result = if batch.full || (batch.git && session.git_state_changed()) {
+        session.full_rescan()
+    } else if !batch.paths.is_empty() {
+        session.rescan_paths(batch.paths)
+    } else {
+        Ok(session.unchanged())
+    };
+    if refs_moved {
+        let _ = app.emit("repo:refs", ());
+    }
     match result {
         Ok(change) if !change.is_empty() => {
             let _ = app.emit("repo:changed", change);

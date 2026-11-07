@@ -47,6 +47,9 @@ pub struct Session {
     pub name: String,
     pub branch: String,
     files: HashMap<String, Scanned>,
+    /// `git::state_key` and `git::refs_key` as of the last full rescan.
+    state_key: u64,
+    refs_key: u64,
 }
 
 impl Session {
@@ -63,7 +66,8 @@ impl Session {
         let root = dunce(root);
         let git_dir = dunce(repo.path().to_path_buf());
         let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        let mut s = Session { root, git_dir, name, branch: String::new(), files: HashMap::new() };
+        let mut s =
+            Session { root, git_dir, name, branch: String::new(), files: HashMap::new(), state_key: 0, refs_key: 0 };
         s.full_rescan().map_err(|e| e.message().to_string())?;
         Ok(s)
     }
@@ -92,12 +96,33 @@ impl Session {
 
     /// Rescan everything. Diffs are only rebuilt for files whose fingerprint changed.
     pub fn full_rescan(&mut self) -> Result<Change, git2::Error> {
-        let (results, branch) = with_retry(|| {
+        let (results, branch, state_key, refs_key) = with_retry(|| {
             let repo = self.repo()?;
-            Ok((git::scan(&repo, None, &self.files)?, git::branch_name(&repo)))
+            let state_key = git::state_key(&repo)?;
+            Ok((git::scan(&repo, None, &self.files)?, git::branch_name(&repo), state_key, git::refs_key(&repo)))
         })?;
         self.branch = branch;
+        self.state_key = state_key;
+        self.refs_key = refs_key;
         Ok(self.apply(results, |_| true))
+    }
+
+    /// Something under .git changed. Only HEAD or the index's entries affect the diff; tools
+    /// rewrite the index's stat data constantly, and that alone needs no rescan.
+    pub fn git_state_changed(&self) -> bool {
+        with_retry(|| git::state_key(&self.repo()?)).map_or(true, |k| k != self.state_key)
+    }
+
+    /// Whether any branch or HEAD moved since the last call (for the history view).
+    pub fn refs_changed(&mut self) -> bool {
+        let Ok(repo) = self.repo() else { return false };
+        let key = git::refs_key(&repo);
+        std::mem::replace(&mut self.refs_key, key) != key
+    }
+
+    /// An empty change set, for "nothing to update".
+    pub fn unchanged(&self) -> Change {
+        Change { branch: self.branch.clone(), ..Default::default() }
     }
 
     /// Rescan only the given working-tree paths (files or directories).

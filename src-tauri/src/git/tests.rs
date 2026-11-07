@@ -286,3 +286,22 @@ fn deleted_and_untracked_pair_shows_as_rename() {
     assert_eq!(s.len(), 1);
     assert_eq!((s[0].entry.status, s[0].entry.old_path.as_deref()), ("R", Some("before.txt")));
 }
+
+#[test]
+fn state_key_ignores_stat_refresh_but_not_staging() {
+    let f = Fixture::new();
+    f.write("a.txt", "one\n");
+    f.commit_all();
+    let before = state_key(&f.repo).unwrap();
+    // Rewriting the index with the same entries (what `git status` does) keeps the key.
+    let mut index = f.repo.index().unwrap();
+    index.write().unwrap();
+    assert_eq!(state_key(&f.repo).unwrap(), before);
+
+    f.write("a.txt", "two\n");
+    f.stage("a.txt");
+    let staged = state_key(&f.repo).unwrap();
+    assert_ne!(staged, before);
+    f.commit_all();
+    assert_ne!(state_key(&f.repo).unwrap(), staged);
+}

@@ -1,7 +1,7 @@
 //! Pure git logic: which files differ from HEAD, and what their diffs look like.
 //! No Tauri types here, so everything is unit-testable against temp-dir repos.
 
-use git2::{Delta, DiffFindOptions, DiffOptions, ErrorCode, Patch, Repository, Status, StatusOptions};
+use git2::{Delta, DiffFindOptions, DiffOptions, ErrorCode, Patch, Repository};
 use serde::Serialize;
 use similar::{capture_diff_slices, Algorithm, DiffOp};
 use std::collections::HashMap;
@@ -110,8 +110,8 @@ pub fn scan(
         .workdir()
         .ok_or_else(|| git2::Error::from_str("bare repositories are not supported"))?
         .to_path_buf();
-    let staged = staged_map(repo, paths)?;
     let head_tree = head_tree(repo)?;
+    let index = repo.index()?;
 
     let mut opts = DiffOptions::new();
     opts.include_untracked(true)
@@ -127,7 +127,13 @@ pub fn scan(
             opts.pathspec(p);
         }
     }
-    let mut diff = repo.diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts))?;
+    // HEAD -> index and index -> working tree, merged: the same thing libgit2's
+    // diff_tree_to_workdir_with_index does, but keeping the halves gives the staged state
+    // without a second walk of the working tree (the expensive part on large repos).
+    let mut diff = repo.diff_tree_to_index(head_tree.as_ref(), Some(&index), Some(&mut opts))?;
+    let workdir_diff = repo.diff_index_to_workdir(Some(&index), Some(&mut opts))?;
+    let staged = staged_map(&diff, &workdir_diff);
+    diff.merge(&workdir_diff)?;
     let mut find = DiffFindOptions::new();
     find.renames(true).for_untracked(true);
     diff.find_similar(Some(&mut find))?;
@@ -235,40 +241,56 @@ fn head_tree(repo: &Repository) -> Result<Option<git2::Tree<'_>>, git2::Error> {
     }
 }
 
-/// path -> staged state, from git status (HEAD vs index, index vs working tree).
-fn staged_map(repo: &Repository, paths: Option<&[String]>) -> Result<HashMap<String, Staged>, git2::Error> {
-    let mut so = StatusOptions::new();
-    so.include_untracked(true)
-        .recurse_untracked_dirs(true)
-        .exclude_submodules(true)
-        .renames_head_to_index(true);
-    if let Some(paths) = paths {
-        so.disable_pathspec_match(true);
-        for p in paths {
-            so.pathspec(p);
+/// path -> staged state: changed between HEAD and the index, and whether the working tree
+/// also differs from the index (partially staged).
+fn staged_map(head_to_index: &git2::Diff, index_to_workdir: &git2::Diff) -> HashMap<String, Staged> {
+    let delta_path = |d: &git2::DiffDelta| d.new_file().path().or(d.old_file().path()).map(path_str);
+    let mut map: HashMap<String, Staged> =
+        head_to_index.deltas().filter_map(|d| delta_path(&d)).map(|p| (p, Staged::Full)).collect();
+    for d in index_to_workdir.deltas().filter(|d| d.status() != Delta::Untracked) {
+        if let Some(s) = delta_path(&d).and_then(|p| map.get_mut(&p)) {
+            *s = Staged::Partial;
         }
     }
-    let statuses = repo.statuses(Some(&mut so))?;
-    let index_bits =
-        Status::INDEX_NEW | Status::INDEX_MODIFIED | Status::INDEX_DELETED | Status::INDEX_RENAMED | Status::INDEX_TYPECHANGE;
-    let wt_bits = Status::WT_MODIFIED | Status::WT_DELETED | Status::WT_RENAMED | Status::WT_TYPECHANGE;
-    let mut map = HashMap::new();
-    for e in statuses.iter() {
-        let s = e.status();
-        let staged = match (s.intersects(index_bits), s.intersects(wt_bits)) {
-            (true, true) => Staged::Partial,
-            (true, false) => Staged::Full,
-            _ => Staged::None,
-        };
-        let path = e
-            .head_to_index()
-            .and_then(|d| d.new_file().path().map(path_str))
-            .or_else(|| e.path().ok().map(str::to_string));
-        if let Some(path) = path {
-            map.insert(path, staged);
+    map
+}
+
+/// Identifies what the diff against HEAD depends on besides working-tree files: the HEAD
+/// commit and the index's entries (not their stat data, which `git status` and editors
+/// rewrite all the time without changing anything).
+pub fn state_key(repo: &Repository) -> Result<u64, git2::Error> {
+    let mut h = Fnv::new();
+    if let Ok(head) = repo.head() {
+        h.write(head.name_bytes());
+        if let Some(id) = head.target() {
+            h.write(id.as_bytes());
         }
     }
-    Ok(map)
+    for e in repo.index()?.iter() {
+        h.write(&e.path);
+        h.write(e.id.as_bytes());
+        h.write(&e.mode.to_le_bytes());
+        h.write(&e.flags.to_le_bytes());
+        h.write(&e.flags_extended.to_le_bytes());
+    }
+    Ok(h.0)
+}
+
+/// Identifies the set of branches and where they point, so history views know to refresh.
+pub fn refs_key(repo: &Repository) -> u64 {
+    let mut h = Fnv::new();
+    if let Ok(refs) = repo.references() {
+        for r in refs.flatten() {
+            h.write(r.name_bytes());
+            if let Some(id) = r.target() {
+                h.write(id.as_bytes());
+            }
+        }
+    }
+    if let Ok(head) = repo.head() {
+        h.write(head.name_bytes());
+    }
+    h.0
 }
 
 fn build_text_diff(path: &str, patch: &Patch, workdir: &Path) -> Result<(FileDiff, u32, u32), git2::Error> {
