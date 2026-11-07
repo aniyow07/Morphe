@@ -52,6 +52,13 @@ export function savePrefs() {
 
 type Listener = () => void;
 const listeners: Listener[] = [];
+const after: Listener[] = [];
+
+/** Run once, right after the next render. */
+export function afterRender(fn: Listener) {
+  after.push(fn);
+  changed();
+}
 let queued = false;
 
 export function subscribe(fn: Listener) {
@@ -61,10 +68,16 @@ export function subscribe(fn: Listener) {
 export function changed() {
   if (queued) return;
   queued = true;
-  requestAnimationFrame(() => {
+  // rAF batches with painting; the timeout keeps state current while the window is hidden
+  // (where rAF is paused), so restoring it never shows stale content.
+  const flush = () => {
+    if (!queued) return;
     queued = false;
     for (const fn of listeners) fn();
-  });
+    for (const fn of after.splice(0)) fn();
+  };
+  requestAnimationFrame(flush);
+  setTimeout(flush, 50);
 }
 
 // ---- derived ----

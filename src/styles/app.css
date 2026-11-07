@@ -220,6 +220,7 @@ kbd {
   min-height: 0;
   display: grid;
   grid-template-columns: var(--sidebar-w) 1px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .divider {

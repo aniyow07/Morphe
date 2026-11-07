@@ -36,16 +36,20 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
   let headerHtml = "";
   let hl: { lang: string; sides: Map<number, { old: Seg[][]; neu: Seg[][]; oi: number[]; ni: number[] }> } | null = null;
 
-  const io = new IntersectionObserver(
-    (entries) => {
-      for (const e of entries) {
-        if (!e.isIntersecting) continue;
-        const c = chunks.find((c) => c.el === e.target);
-        if (c) fill(c);
-      }
-    },
-    { root: scroller, rootMargin: "800px 0px" },
-  );
+  /** Fill every chunk within ~800px of the viewport. Rect-based rather than an
+   *  IntersectionObserver so it also works while the window is hidden. */
+  function fillVisible() {
+    const r = scroller.getBoundingClientRect();
+    const lo = r.top - 800;
+    const hi = r.bottom + 800;
+    for (const c of chunks) {
+      if (c.filled) continue;
+      const b = c.el.getBoundingClientRect();
+      if (b.bottom >= lo && b.top <= hi) fill(c);
+      else if (b.top > hi) break;
+    }
+  }
+  scroller.addEventListener("scroll", fillVisible, { passive: true });
 
   header.addEventListener("click", (e) => {
     const t = e.target as HTMLElement;
@@ -166,7 +170,6 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
   }
 
   function resetBody() {
-    io.disconnect();
     chunks = [];
     hl = null;
     scroller.replaceChildren();
@@ -250,7 +253,8 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
       body.append(notice(`Diff truncated after ${fmt.format(total)} lines. Open the file in your editor to see the rest.`, "notice-inline"));
     }
     scroller.append(body);
-    for (const c of chunks) eager ? fill(c) : io.observe(c.el);
+    if (eager) chunks.forEach(fill);
+    else fillVisible();
   }
 
   function hunkRow(hk: Hunk) {
@@ -284,15 +288,15 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
       chunks.push(c);
       frag.append(c.el);
     }
-    const added = chunks.slice(-Math.ceil(lines.length / CHUNK));
     gap.replaceWith(frag);
-    for (const c of added) io.observe(c.el);
+    // Keep chunks in document order; fillVisible and anchoring rely on it.
+    chunks.sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+    fillVisible();
   }
 
   function fill(c: Chunk) {
     if (c.filled) return;
     c.filled = true;
-    io.unobserve(c.el);
     const segs = c.segs ?? (c.hunk >= 0 ? hunkSegs(c) : null);
     let html = "";
     c.lines.forEach((l, i) => (html += rowHtml(l, segs?.[i] ?? null)));
@@ -353,6 +357,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
       if (!row) return;
       const top = scroller.getBoundingClientRect().top;
       scroller.scrollTop += row.getBoundingClientRect().top - top - a.dy;
+      fillVisible();
       return;
     }
   }

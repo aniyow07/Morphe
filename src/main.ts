@@ -7,13 +7,17 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, events, type Change, type FileEntry, type Snapshot } from "./api";
 import { h } from "./dom";
-import { changed, savePrefs, state, subscribe, viewState, visibleFiles } from "./state";
+import { afterRender, changed, savePrefs, state, subscribe, viewState, visibleFiles } from "./state";
 import { diffView } from "./ui/diffview";
 import { palette } from "./ui/palette";
 import { sidebar, step } from "./ui/sidebar";
 import { tickLive, titlebar } from "./ui/titlebar";
 import { tooltips } from "./ui/tooltip";
 import { goneState, welcome } from "./ui/welcome";
+
+if (import.meta.env.DEV && !("__TAURI_INTERNALS__" in window)) {
+  await (await import("./dev/mock")).installMock();
+}
 
 // ---------- actions ----------
 
@@ -118,8 +122,8 @@ function onChange(c: Change) {
   }
   changed();
   tickLive();
-  // After this frame's render, so freshly added rows exist.
-  requestAnimationFrame(() => sb.pulse(touched.map((f) => f.path)));
+  // After the render, so freshly added rows exist.
+  afterRender(() => sb.pulse(touched.map((f) => f.path)));
 }
 
 function mostRecent(files: FileEntry[]): FileEntry | undefined {
@@ -221,5 +225,5 @@ events.onGone((root) => {
     changed();
     await wl.refresh();
   }
-  requestAnimationFrame(() => getCurrentWindow().show());
+  afterRender(() => getCurrentWindow().show());
 })();
