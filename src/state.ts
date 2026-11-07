@@ -11,10 +11,12 @@ export interface Prefs {
   wrap: boolean;
   sidebarWidth: number;
   mdPreview: boolean;
+  split: boolean;
+  theme: "system" | "light" | "dark";
 }
 
 const PREFS_KEY = "morphe.prefs";
-const defaults: Prefs = { follow: false, hideViewed: false, group: false, wrap: false, sidebarWidth: 300, mdPreview: false };
+const defaults: Prefs = { follow: false, hideViewed: false, group: false, wrap: false, sidebarWidth: 300, mdPreview: false, split: false, theme: "system" };
 
 function loadPrefs(): Prefs {
   try {

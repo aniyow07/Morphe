@@ -1,7 +1,8 @@
 // Slim title bar: repo, branch chip, summary stats, live dot, window controls.
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { esc, fmt, h, icon, isMac } from "../dom";
-import { state, subscribe, totals } from "../state";
+import { changed, state, subscribe, totals } from "../state";
+import { cycleTheme, THEME_LABEL } from "../theme";
 
 export function titlebar(onRepoClick: () => void): HTMLElement {
   const win = getCurrentWindow();
@@ -9,6 +10,8 @@ export function titlebar(onRepoClick: () => void): HTMLElement {
   const repo = h("button", { class: "tb-repo", "data-tip": "Switch repository", onclick: onRepoClick }, live, h("span", { class: "tb-repo-name" }));
   const branch = h("span", { class: "tb-branch", "data-tauri-drag-region": true });
   const stats = h("div", { class: "tb-stats", "data-tauri-drag-region": true, "aria-live": "polite" });
+
+  const themeBtn = h("button", { class: "tgl tb-theme", onclick: () => (cycleTheme(), changed()) });
 
   const maxBtn = h("button", { class: "wc", "aria-label": "Maximize", html: icon.max, onclick: () => win.toggleMaximize() });
   const controls = isMac
@@ -37,15 +40,23 @@ export function titlebar(onRepoClick: () => void): HTMLElement {
     branch,
     h("div", { class: "tb-spacer", "data-tauri-drag-region": true }),
     stats,
+    themeBtn,
     controls,
   );
 
   subscribe(() => {
+    const th = state.prefs.theme;
+    themeBtn.innerHTML = th === "light" ? icon.sun : th === "dark" ? icon.moon : icon.monitor;
+    themeBtn.setAttribute("aria-label", `Theme: ${THEME_LABEL[th]}`);
+    themeBtn.dataset.tip = `Theme: ${THEME_LABEL[th]}`;
     const inRepo = state.screen === "repo" || state.screen === "gone";
-    repo.hidden = !inRepo;
+    repo.disabled = !inRepo;
+    if (inRepo) repo.dataset.tip = "Switch repository";
+    else delete repo.dataset.tip;
+    live.hidden = !inRepo;
     branch.hidden = !inRepo || !state.branch;
     stats.hidden = state.screen !== "repo";
-    (repo.lastChild as HTMLElement).textContent = state.name;
+    (repo.lastChild as HTMLElement).textContent = inRepo ? state.name : "Morphe";
     branch.innerHTML = `${icon.branch}<span>${esc(state.branch)}</span>`;
     branch.title = state.branch;
     const t = totals();

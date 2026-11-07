@@ -2,6 +2,7 @@ import "@fontsource-variable/geist";
 import "@fontsource-variable/jetbrains-mono";
 import "./styles/tokens.css";
 import "./styles/app.css";
+import "./theme";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";

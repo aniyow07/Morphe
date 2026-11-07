@@ -15,13 +15,21 @@ const HIGHLIGHT_MAX_LINES = 5000;
 const HIGHLIGHT_MAX_LINE_LEN = 2000;
 const EAGER_WRAP_LINES = 3000;
 
+/** One visual row. Unified rows use `a` only; split rows put old on `a`, new on `b`.
+ *  `aj`/`bj` index into the hunk's lines (for syntax segments). */
+interface Row {
+  a?: Line;
+  aj?: number;
+  b?: Line;
+  bj?: number;
+}
+
 interface Chunk {
   el: HTMLElement;
-  lines: Line[];
-  /** Per-line syntax segments, filled when the chunk renders. */
+  rows: Row[];
+  /** Syntax segments for expanded context rows (same text on both sides). */
   segs: (Seg[] | null)[] | null;
-  hunk: number;
-  offset: number; // index of the first line within its hunk (or gap)
+  hunk: number; // -1 for expanded context
   filled: boolean;
 }
 
@@ -64,6 +72,11 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
         savePrefs();
         show(current.path, false);
       }
+    } else if (t.closest(".split-tgl")) {
+      state.prefs.split = !state.prefs.split;
+      savePrefs();
+      changed();
+      show(current.path, true);
     } else if (t.closest(".wrap-tgl")) {
       state.prefs.wrap = !state.prefs.wrap;
       savePrefs();
@@ -110,7 +123,10 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
       (md
         ? `<span class="seg" role="group" aria-label="View mode"><button data-mode="diff" aria-pressed="${!state.prefs.mdPreview}" data-tip="Show diff">${icon.code}<span>Diff</span></button><button data-mode="preview" aria-pressed="${state.prefs.mdPreview}" data-tip="Show rendered Markdown">${icon.preview}<span>Preview</span></button></span>`
         : "") +
-      `<button class="tgl wrap-tgl" aria-pressed="${state.prefs.wrap}" aria-label="Wrap long lines" data-tip="Wrap long lines">${icon.wrap}</button>` +
+      (current!.mode === "diff"
+        ? `<button class="tgl split-tgl" aria-pressed="${state.prefs.split}" aria-label="Side-by-side view" data-tip="Side-by-side view">${icon.split}</button>` +
+          `<button class="tgl wrap-tgl" aria-pressed="${state.prefs.wrap || state.prefs.split}" aria-label="Wrap long lines" data-tip="${state.prefs.split ? "Lines always wrap side by side" : "Wrap long lines"}"${state.prefs.split ? " disabled" : ""}>${icon.wrap}</button>`
+        : "") +
       `<button class="viewed-box${vs === "viewed" ? " on" : ""}" role="checkbox" aria-checked="${vs === "viewed"}" data-tip="Mark as viewed" data-kbd="V"><span class="box">${icon.check}</span>Viewed</button>` +
       `</span>`;
     // Only touch the DOM when something visible changed, so hover and tooltips survive.
@@ -223,7 +239,11 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
     const lang = total <= HIGHLIGHT_MAX_LINES ? readyLanguage(f.path) : null;
     hl = lang ? { lang, sides: new Map() } : null;
     const body = h("div", { class: "diff", role: "table", "aria-label": `Diff of ${f.path}` });
-    const eager = state.prefs.wrap && total <= EAGER_WRAP_LINES;
+    const split = state.prefs.split;
+    // Split view always wraps, so its rows can't use exact placeholder heights.
+    const eager = (state.prefs.wrap || split) && total <= EAGER_WRAP_LINES;
+    body.classList.toggle("split", split);
+    scroller.classList.toggle("wrap", state.prefs.wrap || split);
 
     let prevNewEnd = 0;
     let prevOldEnd = 0;
@@ -234,12 +254,9 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
         body.append(gapRow(gapStart, gapEnd, prevOldEnd - prevNewEnd));
       }
       body.append(hunkRow(hk));
-      for (let off = 0; off < hk.lines.length; off += CHUNK) {
-        const lines = hk.lines.slice(off, off + CHUNK);
-        const c: Chunk = { el: h("div", { class: "chunk" }), lines, segs: null, hunk: i, offset: off, filled: false };
-        c.el.style.height = `${lines.length * ROW_H}px`;
-        chunks.push(c);
-        body.append(c.el);
+      const rows = split ? pairRows(hk.lines) : hk.lines.map((a, aj) => ({ a, aj }));
+      for (let off = 0; off < rows.length; off += CHUNK) {
+        body.append(addChunk(rows.slice(off, off + CHUNK), null, i).el);
       }
       prevNewEnd = hk.newStart + hk.newLines - 1;
       prevOldEnd = hk.oldStart + hk.oldLines - 1;
@@ -255,6 +272,13 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
     scroller.append(body);
     if (eager) chunks.forEach(fill);
     else fillVisible();
+  }
+
+  function addChunk(rows: Row[], segs: (Seg[] | null)[] | null, hunk: number): Chunk {
+    const c: Chunk = { el: h("div", { class: "chunk" }), rows, segs, hunk, filled: false };
+    c.el.style.height = `${rows.length * ROW_H}px`;
+    chunks.push(c);
+    return c;
   }
 
   function hunkRow(hk: Hunk) {
@@ -281,12 +305,10 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
     if (my !== gen || !texts || !gap.isConnected) return;
     const lines: Line[] = texts.map((t, i) => ({ k: " ", n: start + i, o: start + i + delta, t }));
     const segs = hl && lines.length <= HIGHLIGHT_MAX_LINES ? highlightLines(texts, hl.lang) : null;
+    const rows: Row[] = lines.map((l) => (state.prefs.split ? { a: l, b: l } : { a: l }));
     const frag = document.createDocumentFragment();
-    for (let off = 0; off < lines.length; off += CHUNK) {
-      const c: Chunk = { el: h("div", { class: "chunk" }), lines: lines.slice(off, off + CHUNK), segs: segs ? segs.slice(off, off + CHUNK) : null, hunk: -1, offset: 0, filled: false };
-      c.el.style.height = `${c.lines.length * ROW_H}px`;
-      chunks.push(c);
-      frag.append(c.el);
+    for (let off = 0; off < rows.length; off += CHUNK) {
+      frag.append(addChunk(rows.slice(off, off + CHUNK), segs ? segs.slice(off, off + CHUNK) : null, -1).el);
     }
     gap.replaceWith(frag);
     // Keep chunks in document order; fillVisible and anchoring rely on it.
@@ -297,36 +319,42 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
   function fill(c: Chunk) {
     if (c.filled) return;
     c.filled = true;
-    const segs = c.segs ?? (c.hunk >= 0 ? hunkSegs(c) : null);
+    const side = c.hunk >= 0 ? hunkSides(c.hunk) : null;
+    const seg = (l: Line | undefined, j: number | undefined, i: number): Seg[] | null => {
+      if (!l) return null;
+      if (c.segs) return c.segs[i];
+      if (!side || j === undefined) return null;
+      const idx = l.k === "-" ? side.oi[j] : side.ni[j];
+      return idx < 0 ? null : ((l.k === "-" ? side.old : side.neu)[idx] ?? null);
+    };
     let html = "";
-    c.lines.forEach((l, i) => (html += rowHtml(l, segs?.[i] ?? null)));
+    c.rows.forEach((r, i) => {
+      html += state.prefs.split
+        ? splitRowHtml(r.a, seg(r.a, r.aj, i), r.b, seg(r.b, r.bj, i))
+        : rowHtml(r.a!, seg(r.a, r.aj, i));
+    });
     c.el.innerHTML = html;
     c.el.style.height = "";
   }
 
-  /** Syntax segments for a hunk chunk: each side of the hunk is highlighted as one block. */
-  function hunkSegs(c: Chunk): (Seg[] | null)[] | null {
+  /** Each side of a hunk is highlighted as one block, so multi-line constructs stay correct. */
+  function hunkSides(i: number) {
     if (!hl || !current?.diff) return null;
-    const hk = current.diff.hunks[c.hunk];
-    let side = hl.sides.get(c.hunk);
+    let side = hl.sides.get(i);
     if (!side) {
       const oldT: string[] = [];
       const newT: string[] = [];
       const oi: number[] = [];
       const ni: number[] = [];
-      for (const l of hk.lines) {
+      for (const l of current.diff.hunks[i].lines) {
         const long = l.t.length > HIGHLIGHT_MAX_LINE_LEN;
         oi.push(l.k !== "+" && !long ? oldT.push(l.t) - 1 : -1);
         ni.push(l.k !== "-" && !long ? newT.push(l.t) - 1 : -1);
       }
       side = { old: highlightLines(oldT, hl.lang), neu: highlightLines(newT, hl.lang), oi, ni };
-      hl.sides.set(c.hunk, side);
+      hl.sides.set(i, side);
     }
-    return c.lines.map((l, i) => {
-      const j = c.offset + i;
-      const idx = l.k === "-" ? side!.oi[j] : side!.ni[j];
-      return idx < 0 ? null : (l.k === "-" ? side!.old : side!.neu)[idx] ?? null;
-    });
+    return side;
   }
 
   function captureAnchor(): { n?: number; o?: number; dy: number } | null {
@@ -350,7 +378,11 @@ export function diffView(actions: { toggleViewed: (path: string) => void }) {
     if (a.n === undefined && a.o === undefined) return;
     // Find the first line at or after the anchor (it may have been edited away).
     for (const c of chunks) {
-      const i = c.lines.findIndex((l) => (a.n !== undefined && l.n !== undefined ? l.n >= a.n : a.o !== undefined && l.o !== undefined && l.o >= a.o));
+      const i = c.rows.findIndex((r) => {
+        const n = r.b?.n ?? r.a?.n;
+        const o = r.a?.o ?? r.b?.o;
+        return a.n !== undefined && n !== undefined ? n >= a.n : a.o !== undefined && o !== undefined && o >= a.o;
+      });
       if (i < 0) continue;
       fill(c);
       const row = c.el.children[i] as HTMLElement | undefined;
@@ -384,6 +416,45 @@ function rowHtml(l: Line, segs: Seg[] | null): string {
     `<span class="sg">${l.k === " " ? "" : l.k === "+" ? "+" : "−"}</span>` +
     `<span class="cd">${codeHtml(l.t, segs, l.e)}</span></div>`
   );
+}
+
+function splitRowHtml(a: Line | undefined, as: Seg[] | null, b: Line | undefined, bs: Seg[] | null): string {
+  const n = b?.n ?? a?.n;
+  const o = a?.o ?? b?.o;
+  const attrs = `${n !== undefined ? ` data-n="${n}"` : ""}${o !== undefined ? ` data-o="${o}"` : ""}`;
+  const half = (l: Line | undefined, segs: Seg[] | null, no: number | undefined) => {
+    if (!l) return `<span class="no e"></span><span class="sg e"></span><span class="cd e"></span>`;
+    const k = l.k === "+" ? " a" : l.k === "-" ? " d" : "";
+    return (
+      `<span class="no${k}">${no ?? ""}</span><span class="sg${k}">${l.k === "+" ? "+" : l.k === "-" ? "−" : ""}</span>` +
+      `<span class="cd${k}">${codeHtml(l.t, segs, l.e)}</span>`
+    );
+  };
+  return `<div class="sr" role="row"${attrs}>${half(a, as, a?.o)}${half(b, bs, b?.n)}</div>`;
+}
+
+/** Pair removed lines with the added lines that follow them, side by side. */
+function pairRows(lines: Line[]): Row[] {
+  const rows: Row[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const l = lines[i];
+    if (l.k === " ") {
+      rows.push({ a: l, aj: i, b: l, bj: i });
+      i++;
+      continue;
+    }
+    const dels: number[] = [];
+    const adds: number[] = [];
+    while (i < lines.length && lines[i].k === "-") dels.push(i++);
+    while (i < lines.length && lines[i].k === "+") adds.push(i++);
+    for (let p = 0; p < Math.max(dels.length, adds.length); p++) {
+      const d = dels[p];
+      const a = adds[p];
+      rows.push({ a: lines[d], aj: d, b: lines[a], bj: a });
+    }
+  }
+  return rows;
 }
 
 /** Merge syntax segments with word-level emphasis ranges into one run of HTML. */
