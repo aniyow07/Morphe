@@ -107,3 +107,35 @@ mod tests {
         assert!(!is_git_state(Path::new("objects/ab/cdef")));
     }
 }
+
+#[cfg(test)]
+mod live_tests {
+    use super::*;
+    use std::sync::mpsc;
+
+    #[test]
+    fn edits_arrive_as_path_batches_and_ignored_files_are_dropped() {
+        let dir = tempfile::TempDir::new().unwrap();
+        Repository::init(dir.path()).unwrap();
+        std::fs::write(dir.path().join(".gitignore"), "build/\n").unwrap();
+        std::fs::create_dir(dir.path().join("build")).unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let root = PathBuf::from(root.to_string_lossy().trim_start_matches(r"\\?\"));
+        let (tx, rx) = mpsc::channel();
+        let _w = start(root.clone(), root.join(".git"), move |b| tx.send(b).unwrap()).unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+
+        std::fs::write(root.join("build/out.o"), "ignored").unwrap();
+        std::fs::write(root.join("src.txt"), "hello").unwrap();
+        let mut paths = Vec::new();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while std::time::Instant::now() < deadline && !paths.contains(&"src.txt".to_string()) {
+            if let Ok(b) = rx.recv_timeout(Duration::from_millis(500)) {
+                assert!(!b.gone);
+                paths.extend(b.paths);
+            }
+        }
+        assert!(paths.contains(&"src.txt".to_string()), "got {paths:?}");
+        assert!(!paths.iter().any(|p| p.starts_with("build")), "ignored path leaked: {paths:?}");
+    }
+}

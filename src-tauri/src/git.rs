@@ -147,6 +147,10 @@ pub fn scan(
             continue;
         };
         let old_path = (status == "R").then(|| delta.old_file().path().map(path_str)).flatten();
+        // Submodules (gitlinks) have no content of their own to show here.
+        if delta.new_file().mode() == git2::FileMode::Commit || delta.old_file().mode() == git2::FileMode::Commit {
+            continue;
+        }
 
         let (size, mtime) = file_meta(&workdir.join(&path));
         let old_id = delta.old_file().id();

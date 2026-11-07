@@ -223,3 +223,66 @@ fn read_lines_returns_requested_range() {
     f.write("a.txt", "1\r\n2\r\n3\r\n4\r\n");
     assert_eq!(read_lines(f.dir.path(), "a.txt", 2, 3).unwrap(), ["2", "3"]);
 }
+
+#[test]
+fn long_diffs_are_truncated() {
+    let f = Fixture::new();
+    f.write("long.txt", "line\n".repeat(MAX_DIFF_LINES + 500));
+    let s = f.scan();
+    let d = &s[0].diff;
+    assert!(d.truncated);
+    assert_eq!(d.hunks.iter().map(|h| h.lines.len()).sum::<usize>(), MAX_DIFF_LINES);
+    assert_eq!(s[0].entry.additions as usize, MAX_DIFF_LINES + 500, "counts stay exact");
+}
+
+#[test]
+fn submodules_are_skipped() {
+    let f = Fixture::new();
+    f.write("a.txt", "a\n");
+    f.commit_all();
+    // A gitlink entry, as `git submodule add` would create, pointing at an arbitrary commit.
+    let head = f.repo.head().unwrap().target().unwrap();
+    let mut index = f.repo.index().unwrap();
+    let entry = git2::IndexEntry {
+        ctime: git2::IndexTime::new(0, 0),
+        mtime: git2::IndexTime::new(0, 0),
+        dev: 0,
+        ino: 0,
+        mode: 0o160000,
+        uid: 0,
+        gid: 0,
+        file_size: 0,
+        id: head,
+        flags: 0,
+        flags_extended: 0,
+        path: b"vendor/lib".to_vec(),
+    };
+    index.add(&entry).unwrap();
+    index.write().unwrap();
+    fs::create_dir_all(f.dir.path().join("vendor/lib")).unwrap();
+    f.write("vendor/lib/inner.txt", "inside the submodule\n");
+    let paths: Vec<_> = f.scan().into_iter().map(|s| (s.entry.path, s.entry.status)).collect();
+    assert!(paths.iter().all(|(p, _)| !p.starts_with("vendor/lib")), "{paths:?}");
+}
+
+#[test]
+fn scan_works_while_index_is_locked() {
+    let f = Fixture::new();
+    f.write("a.txt", "a\n");
+    f.commit_all();
+    f.write("a.txt", "b\n");
+    fs::write(f.repo.path().join("index.lock"), b"partial write").unwrap();
+    assert_eq!(f.entry("a.txt").status, "M");
+}
+
+#[test]
+fn deleted_and_untracked_pair_shows_as_rename() {
+    let f = Fixture::new();
+    let body = (0..30).map(|i| format!("row {i}\n")).collect::<String>();
+    f.write("before.txt", &body);
+    f.commit_all();
+    fs::rename(f.dir.path().join("before.txt"), f.dir.path().join("after.txt")).unwrap();
+    let s = f.scan();
+    assert_eq!(s.len(), 1);
+    assert_eq!((s[0].entry.status, s[0].entry.old_path.as_deref()), ("R", Some("before.txt")));
+}

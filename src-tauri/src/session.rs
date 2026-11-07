@@ -170,3 +170,52 @@ fn dunce(p: PathBuf) -> PathBuf {
     let s = s.trim_end_matches(['/', '\\']);
     PathBuf::from(s)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn repo_with(files: &[(&str, &str)]) -> tempfile::TempDir {
+        let dir = tempfile::TempDir::new().unwrap();
+        let repo = Repository::init(dir.path()).unwrap();
+        repo.config().unwrap().set_bool("core.autocrlf", false).unwrap();
+        for (p, c) in files {
+            fs::write(dir.path().join(p), c).unwrap();
+        }
+        dir
+    }
+
+    #[test]
+    fn path_rescan_reports_upserts_and_removals() {
+        let dir = repo_with(&[("a.txt", "a\n"), ("b.txt", "b\n")]);
+        let mut s = Session::open(dir.path()).unwrap();
+        assert_eq!(s.snapshot(Default::default()).files.len(), 2);
+
+        fs::write(dir.path().join("a.txt"), "a\nmore\n").unwrap();
+        fs::remove_file(dir.path().join("b.txt")).unwrap();
+        let c = s.rescan_paths(vec!["a.txt".into(), "b.txt".into()]).unwrap();
+        assert_eq!(c.upserts.len(), 1);
+        assert!(c.upserts[0].content_changed);
+        assert_eq!(c.removed, vec!["b.txt".to_string()]);
+
+        // Nothing changed: an empty change set.
+        assert!(s.rescan_paths(vec!["a.txt".into()]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn staging_only_changes_metadata() {
+        let dir = repo_with(&[("a.txt", "a\n")]);
+        let mut s = Session::open(dir.path()).unwrap();
+        let repo = Repository::open(dir.path()).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("a.txt")).unwrap();
+        index.write().unwrap();
+        let c = s.full_rescan().unwrap();
+        assert_eq!(c.upserts.len(), 1);
+        assert_eq!(c.upserts[0].entry.status, "A");
+        // Status changed U -> A, so the diff hash (which includes status) changes too;
+        // a second rescan with nothing new reports nothing.
+        assert!(s.full_rescan().unwrap().is_empty());
+    }
+}
