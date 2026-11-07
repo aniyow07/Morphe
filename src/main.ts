@@ -309,7 +309,16 @@ const wl = welcome(openRepo, pickFolder);
 const gone = goneState(pickFolder, () => openRepo(state.root));
 const pal = palette((p) => select(p));
 const prefsSheet = settings({ refreshDiff: () => dv.refresh() });
-app.append(titlebar(goWelcome, prefsSheet.open), workspace, wl.el, gone.el, pal.el, prefsSheet.el, toastEl);
+// The branch chip: jump to History's commit list with the branch picker open.
+function showBranches() {
+  setMode("history");
+  if (state.history.detail) {
+    state.history.detail = false;
+    changed();
+  }
+  setTimeout(() => sb.openBranches());
+}
+app.append(titlebar(goWelcome, prefsSheet.open, showBranches), workspace, wl.el, gone.el, pal.el, prefsSheet.el, toastEl);
 tooltips();
 
 subscribe(() => {
@@ -371,7 +380,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && state.mode === "history" && state.history.detail) {
     state.history.detail = false;
     changed();
-    requestAnimationFrame(() => sb.focusCommits());
+    setTimeout(() => sb.focusCommits());
   } else if (state.mode === "history" && e.shiftKey && (k === "j" || k === "k")) stepCommit(k === "j" ? 1 : -1, historyActions);
   else if (k === "j") step(1, select);
   else if (k === "k") step(-1, select);

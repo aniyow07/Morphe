@@ -151,6 +151,12 @@ kbd {
   border-radius: 11px;
   color: var(--text-muted);
   font-size: var(--fs-12);
+  transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
+}
+.tb-branch:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+  background: var(--surface-hover);
 }
 .tb-branch span {
   overflow: hidden;

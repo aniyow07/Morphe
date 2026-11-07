@@ -272,6 +272,7 @@ export function sidebar(actions: SidebarActions) {
   return {
     el: root,
     focusCommits: hist.focusList,
+    openBranches: hist.openBranches,
     focusFilter() {
       filter.focus();
       filter.select();

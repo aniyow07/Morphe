@@ -4,11 +4,11 @@ import { esc, fmt, h, icon, isMac, modKey } from "../dom";
 import { changed, state, subscribe, totals } from "../state";
 import { shownKind, toggleLightDark } from "../theme";
 
-export function titlebar(onRepoClick: () => void, onSettings: () => void): HTMLElement {
+export function titlebar(onRepoClick: () => void, onSettings: () => void, onBranch: () => void): HTMLElement {
   const win = getCurrentWindow();
   const live = h("span", { class: "live-dot", "aria-hidden": "true" });
   const repo = h("button", { class: "tb-repo", "data-tip": "Switch repository", onclick: onRepoClick }, live, h("span", { class: "tb-repo-name" }));
-  const branch = h("span", { class: "tb-branch", "data-tauri-drag-region": true });
+  const branch = h("button", { class: "tb-branch", "data-tip": "Branches and history", onclick: onBranch });
   const stats = h("div", { class: "tb-stats", "data-tauri-drag-region": true, "aria-live": "polite" });
 
   const themeBtn = h("button", { class: "tgl tb-theme", onclick: () => (toggleLightDark(), changed()) });

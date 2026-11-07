@@ -85,7 +85,7 @@ export function historyPanel(actions: HistoryActions) {
   const openDetail = (open: boolean) => {
     state.history.detail = open;
     changed();
-    if (!open) requestAnimationFrame(() => list.focus());
+    if (!open) setTimeout(() => list.focus());
   };
   list.addEventListener("click", (e) => {
     const row = (e.target as HTMLElement).closest<HTMLElement>(".crow");
@@ -127,6 +127,8 @@ export function historyPanel(actions: HistoryActions) {
     const shown = shownBranch();
     branchBtn.innerHTML = `${icon.branch}<span class="bb-name">${esc(shown === "HEAD" ? "Detached HEAD" : shown || "No branches")}</span><span class="bb-chev">${icon.chevron}</span>`;
     branchBtn.toggleAttribute("disabled", H.branches.length === 0);
+    // Opened before the branch list arrived: fill it in once it does.
+    if (!menu.hidden && menu.childElementCount !== H.branches.length) openMenu(true);
 
     // The list only grows by pages or resets, so append when it's an extension.
     const extends_ = rendered.length > 0 && H.commits.length >= rendered.length && H.commits[0]?.id === rendered[0].id && H.commits[rendered.length - 1]?.id === rendered[rendered.length - 1].id;
@@ -202,6 +204,9 @@ export function historyPanel(actions: HistoryActions) {
 
   return {
     el,
+    openBranches() {
+      openMenu(true);
+    },
     focusList() {
       list.focus();
     },
