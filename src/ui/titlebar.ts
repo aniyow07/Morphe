@@ -1,17 +1,18 @@
 // Slim title bar: repo, branch chip, summary stats, live dot, window controls.
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { esc, fmt, h, icon, isMac } from "../dom";
+import { esc, fmt, h, icon, isMac, modKey } from "../dom";
 import { changed, state, subscribe, totals } from "../state";
-import { cycleTheme, THEME_LABEL } from "../theme";
+import { shownKind, toggleLightDark } from "../theme";
 
-export function titlebar(onRepoClick: () => void): HTMLElement {
+export function titlebar(onRepoClick: () => void, onSettings: () => void): HTMLElement {
   const win = getCurrentWindow();
   const live = h("span", { class: "live-dot", "aria-hidden": "true" });
   const repo = h("button", { class: "tb-repo", "data-tip": "Switch repository", onclick: onRepoClick }, live, h("span", { class: "tb-repo-name" }));
   const branch = h("span", { class: "tb-branch", "data-tauri-drag-region": true });
   const stats = h("div", { class: "tb-stats", "data-tauri-drag-region": true, "aria-live": "polite" });
 
-  const themeBtn = h("button", { class: "tgl tb-theme", onclick: () => (cycleTheme(), changed()) });
+  const themeBtn = h("button", { class: "tgl tb-theme", onclick: () => (toggleLightDark(), changed()) });
+  const settingsBtn = h("button", { class: "tgl tb-settings", "aria-label": "Settings", "data-tip": "Settings", "data-kbd": `${modKey}+,`, html: icon.gear, onclick: onSettings });
 
   const maxBtn = h("button", { class: "wc", "aria-label": "Maximize", html: icon.max, onclick: () => win.toggleMaximize() });
   const controls = isMac
@@ -41,14 +42,16 @@ export function titlebar(onRepoClick: () => void): HTMLElement {
     h("div", { class: "tb-spacer", "data-tauri-drag-region": true }),
     stats,
     themeBtn,
+    settingsBtn,
     controls,
   );
 
   subscribe(() => {
-    const th = state.prefs.theme;
-    themeBtn.innerHTML = th === "light" ? icon.sun : th === "dark" ? icon.moon : icon.monitor;
-    themeBtn.setAttribute("aria-label", `Theme: ${THEME_LABEL[th]}`);
-    themeBtn.dataset.tip = `Theme: ${THEME_LABEL[th]}`;
+    // Shows what a click does: the moon switches to dark, the sun to light.
+    const dark = shownKind() === "dark";
+    themeBtn.innerHTML = dark ? icon.sun : icon.moon;
+    themeBtn.setAttribute("aria-label", dark ? "Switch to light" : "Switch to dark");
+    themeBtn.dataset.tip = dark ? "Switch to light" : "Switch to dark";
     const inRepo = state.screen === "repo" || state.screen === "gone";
     repo.disabled = !inRepo;
     if (inRepo) repo.dataset.tip = "Switch repository";

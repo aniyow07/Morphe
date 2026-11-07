@@ -18,7 +18,9 @@ updating the moment files change.
 - "All files": the whole working tree as a folder tree (loaded one folder at a time, ignored
   files left out), changed files in their status color and folders showing how many changes
   they hold. Unchanged files open read-only; J / K still step through changed files only
-- Light, dark, or follow the OS
+- Settings (gear in the title bar, `Ctrl+,` / `⌘,`): light, dark or match the OS, and a theme
+  for each: Graphite, Midnight, Ember, Forest and High contrast (dark); Paper, Sand and Mist
+  (light). The sun/moon button in the title bar flips between your light and dark theme
 
 ## Keyboard
 
@@ -29,6 +31,7 @@ updating the moment files change.
 | `V` | Toggle viewed for the selected file |
 | `/` | Focus the filter box (`Esc` clears it) |
 | `Ctrl+P` / `⌘P` | Jump to a file |
+| `Ctrl+,` / `⌘,` | Settings |
 
 ## Running it
 
@@ -66,7 +69,7 @@ src/
   state.ts    app state and derived file list
   ui/         title bar, sidebar, diff view, palette, welcome, tooltip
   highlight.ts, markdown.ts, theme.ts
-  styles/tokens.css   every color, size, radius and duration (both themes)
+  styles/tokens.css   every color, size, radius and duration (base light and dark, plus each alternate theme)
 ```
 
 **Reading the repo.** The Rust side owns all git and filesystem work through `git2` (libgit2).

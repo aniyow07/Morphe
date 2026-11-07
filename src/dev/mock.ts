@@ -3,6 +3,7 @@
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { changed, state } from "../state";
+import { applyTheme } from "../theme";
 import { tree } from "../ui/tree";
 
 export async function installMock() {
@@ -64,10 +65,14 @@ export async function installMock() {
     wrap: q.has("wrap"),
     group: q.has("group"),
     allFiles: q.has("all"),
+    theme: q.get("mode") ?? "system",
+    darkTheme: q.get("dt") ?? "graphite",
+    lightTheme: q.get("lt") ?? "paper",
     hideViewed: q.has("hide"),
     follow: q.has("follow"),
     sidebarWidth: Number(q.get("sidebar") ?? 300),
   });
+  applyTheme();
   if (q.has("noanim")) document.head.append(Object.assign(document.createElement("style"), { textContent: "*{animation:none!important;transition:none!important}" }));
   setTimeout(async () => {
     if (q.has("history")) {
@@ -90,6 +95,7 @@ export async function installMock() {
     if (q.get("scroll")) sc.scrollTop = Number(q.get("scroll"));
     sc.dispatchEvent(new Event("scroll"));
     if (q.has("gone")) emit("repo:gone", fx.snapshot.root);
+    if (q.has("settings")) document.querySelector<HTMLElement>(".tb-settings")?.click();
     if (q.get("touch")) for (const p of q.get("touch")!.split(",")) (window as any).__touch(p);
     if (q.get("palette") !== null) {
       document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "p", ctrlKey: true, bubbles: true }));

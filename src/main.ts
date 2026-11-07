@@ -13,6 +13,7 @@ import { stepCommit } from "./ui/history";
 import { invalidate, resetTree, reveal } from "./ui/tree";
 import { diffView } from "./ui/diffview";
 import { palette } from "./ui/palette";
+import { settings } from "./ui/settings";
 import { sidebar, step } from "./ui/sidebar";
 import { tickLive, titlebar } from "./ui/titlebar";
 import { tooltips } from "./ui/tooltip";
@@ -267,7 +268,8 @@ const workspace = h("main", { class: "workspace" }, sb.el, divider, dv.el);
 const wl = welcome(openRepo, pickFolder);
 const gone = goneState(pickFolder, () => openRepo(state.root));
 const pal = palette((p) => select(p));
-app.append(titlebar(goWelcome), workspace, wl.el, gone.el, pal.el);
+const prefsSheet = settings();
+app.append(titlebar(goWelcome, prefsSheet.open), workspace, wl.el, gone.el, pal.el, prefsSheet.el);
 tooltips();
 
 subscribe(() => {
@@ -307,8 +309,13 @@ divider.addEventListener("keydown", (e) => {
 // ---------- keyboard ----------
 
 document.addEventListener("keydown", (e) => {
-  if (pal.isOpen) return;
+  if (pal.isOpen || prefsSheet.isOpen) return;
   const k = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && e.key === ",") {
+    e.preventDefault();
+    prefsSheet.open();
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && k === "p") {
     e.preventDefault();
     if (state.screen === "repo") pal.open();
@@ -344,6 +351,7 @@ document.addEventListener("morphe:pref", (e) => {
 events.onChanged(onChange);
 events.onBranch((b) => ((state.branch = b), changed()));
 events.onRefs(onRefs);
+document.addEventListener("morphe:theme", changed);
 events.onGone((root) => {
   state.screen = "gone";
   gone.set(root);

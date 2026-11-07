@@ -17,10 +17,12 @@ export interface Prefs {
   theme: "system" | "light" | "dark";
   /** Show every file as a folder tree instead of only the changed ones. */
   allFiles: boolean;
+  darkTheme: string;
+  lightTheme: string;
 }
 
 const PREFS_KEY = "morphe.prefs";
-const defaults: Prefs = { follow: false, hideViewed: false, group: false, wrap: false, sidebarWidth: 300, mdPreview: false, split: false, theme: "system", allFiles: false };
+const defaults: Prefs = { follow: false, hideViewed: false, group: false, wrap: false, sidebarWidth: 300, mdPreview: false, split: false, theme: "system", allFiles: false, darkTheme: "graphite", lightTheme: "paper" };
 
 function loadPrefs(): Prefs {
   try {
