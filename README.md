@@ -1,52 +1,79 @@
-# Morphe
+<p align="center">
+  <img src="src-tauri/icons/128x128@2x.png" width="112" height="112" alt="Morphe icon">
+</p>
 
-A fast, read-only, live viewer of a git repository's working-tree diff. Keep it open beside your
-editor (or an agent like Claude Code) and it shows exactly what differs from `HEAD`, file by file,
-updating the moment files change.
+<h1 align="center">Morphe</h1>
 
-- Everything that differs from `HEAD`: staged, unstaged and untracked, with renames
-- Per file: status (M/A/D/U/R/T), `+`/`−` counts, staged / partially-staged badge
-- Unified view with old/new line numbers, hunk headers, word-level highlights, syntax highlighting,
-  and collapsed "N unchanged lines" regions you can expand
-- Side-by-side view, line wrapping, and a rendered preview for Markdown files
-- Live updates with no polling; changed files get a brief accent trace and an "updated" dot
-- "Follow latest edit" mode, per-file "Viewed" marks that reset when the file changes again,
-  and "Hide viewed"
-- History: any local branch's commits, newest first, loaded 100 at a time as you scroll.
-  Selecting a commit shows its changes against its first parent in the same file list and diff
-  view (unified, side by side, Markdown preview)
-- "All files": the whole working tree as a folder tree (loaded one folder at a time, ignored
-  files left out), changed files in their status color and folders showing how many changes
-  they hold. Unchanged files open read-only; J / K still step through changed files only
-- Compare with another branch: in a repo with more than one branch, a "Compare with" picker
-  above the file list shows everything since this branch split from the chosen one (committed
-  and uncommitted), instead of only what differs from the last commit
-- Ignore whitespace (Settings → Diff): hides whitespace-only edits; files with nothing else
-  changed drop out of the list
-- Open in editor: the button above each file, or double-click a line to open it there
-  (VS Code, Cursor, Zed or the system default app; Settings → General)
-- Find in the open file with `Ctrl+F` / `⌘F`. It searches the lines shown, not collapsed
-  unchanged regions
-- Settings (gear in the title bar, `Ctrl+,` / `⌘,`): light, dark or match the OS, and a theme
-  for each: Graphite, Midnight, Ember, Forest and High contrast (dark); Paper, Sand and Mist
-  (light). The sun/moon button in the title bar flips between your light and dark theme
-- Settings also cover diff text size, tab width, syntax highlighting, default layout, wrap,
-  how Markdown opens, row density, reduced motion, reopening the last repository on launch,
-  and a list of keyboard shortcuts
+<p align="center">
+  <b>A live, read-only view of what's changing in your git repository.</b><br>
+  Keep it open beside your editor, or beside an agent like Claude Code, and watch every edit land as a diff.
+</p>
+
+<p align="center">
+  Tauri 2 · Rust + libgit2 · plain TypeScript · Windows, macOS, Linux
+</p>
+
+---
+
+## What it does
+
+**Watch changes as they happen**
+
+- Shows everything that differs from `HEAD`: staged, unstaged and untracked files, with renames.
+- Updates the moment a file is saved. There's no polling, and changed files flash briefly so you can see what just moved.
+- **Follow latest edit** jumps to each file as it changes.
+- **Compare with** another branch to see everything since your branch split off, committed and uncommitted.
+
+**Read diffs comfortably**
+
+- Unified or side-by-side view, with word-level highlights and syntax highlighting.
+- Collapsed "N unchanged lines" sections, each labelled with the function or heading it sits in.
+- A rendered preview for Markdown files.
+- Find in the open file, an ignore-whitespace setting, and a line-wrap toggle.
+- Open any file in VS Code, Cursor or Zed, or double-click a line to jump straight to it.
+
+**Keep track of what you've reviewed**
+
+- Tick files as **Viewed**. A tick resets when the file changes again, and **Hide viewed** clears the list down to what's left.
+- Each file shows its status (M, A, D, U, R, T), `+`/`−` counts and a staged badge.
+
+**Look back through history**
+
+- Browse any local branch's commits, grouped by day on a timeline and loaded 100 at a time.
+- Open a commit to see its files and diffs, step to newer or older commits, and fold the details away.
+- **All files** shows the whole repository as a folder tree, for your working tree or as it was at any commit, with changed files marked in their status color.
+
+**Make it yours**
+
+- Eight themes: Graphite, Midnight, Ember, Forest and High contrast (dark), and Paper, Sand and Mist (light). Choose one of each, then follow the OS or pick a mode.
+- You can also set the diff text size, tab width, row density and reduced motion, and choose to reopen your last repository on launch.
+
+## Install
+
+Build the installer (see [Building](#building)), then run:
+
+```
+src-tauri\target\release\bundle\nsis\Morphe_0.1.0_x64-setup.exe
+```
+
+The same folder has an `.msi` too. On macOS and Linux, `npm run tauri build` produces a `.dmg` or `.app`, or a `.deb` or `.AppImage`.
+
+Open a repository from the start screen, or pass a path: `morphe C:\path\to\repo`. Any folder inside a repository works.
 
 ## Keyboard
 
 | Key | Action |
 |---|---|
-| `J` / `K` (or `↓` / `↑` in the list) | Next / previous file |
-| `Shift+J` / `Shift+K` (or `↓` / `↑` in the commit list) | Next / previous commit, in History |
-| `V` | Toggle viewed for the selected file |
-| `/` | Focus the filter box (`Esc` clears it) |
+| `J` / `K` | Next / previous file |
+| `Shift+J` / `Shift+K` | Next / previous commit, in History |
+| `V` | Mark the selected file viewed |
+| `/` | Filter files (`Esc` clears) |
 | `Ctrl+P` / `⌘P` | Jump to a file |
-| `Ctrl+,` / `⌘,` | Settings |
 | `Ctrl+F` / `⌘F` | Find in the open file (`Enter` / `Shift+Enter` for next / previous) |
+| `Ctrl+,` / `⌘,` | Settings |
+| `Esc` | Back from a commit to the commit list |
 
-## Running it
+## Building
 
 Prerequisites: Rust (stable, 1.85+), Node 20+, and the
 [Tauri 2 system dependencies](https://tauri.app/start/prerequisites/) for your OS
@@ -59,13 +86,14 @@ npm run tauri dev -- -- C:\path\repo   # open a repository straight away
 npm run tauri build                    # release build + installers in src-tauri/target/release/bundle
 ```
 
-The built binary takes a path too: `morphe <path>`. Any folder inside a repository works.
-
 Tests:
 
 ```bash
 cd src-tauri && cargo test
 ```
+
+The app icon's source is `src-tauri/icons/icon-source.svg`. To regenerate every size from it,
+export it to a 1024×1024 PNG and run `npx tauri icon <that png>`.
 
 ## How it works
 
@@ -80,17 +108,18 @@ src-tauri/src/
 src/
   main.ts     wiring, keyboard, event handling
   state.ts    app state and derived file list
-  ui/         title bar, sidebar, diff view, palette, welcome, tooltip
+  ui/         title bar, sidebar, history, file tree, diff view, settings, palette, welcome
   highlight.ts, markdown.ts, theme.ts
   styles/tokens.css   every color, size, radius and duration (base light and dark, plus each alternate theme)
 ```
 
 **Reading the repo.** The Rust side owns all git and filesystem work through `git2` (libgit2).
-`diff_tree_to_workdir_with_index` diffs `HEAD` (or the empty tree when there are no commits)
-against the working tree using the index's stat cache, so unchanged files cost a `stat`, not a
-read. It applies git's own filters (so `core.autocrlf` doesn't make every file look changed),
+It diffs `HEAD` (or the empty tree when there are no commits, or the merge base when comparing
+with a branch) against the index, and the index against the working tree using its stat cache,
+so unchanged files cost a `stat`, not a read. Keeping the two halves gives the staged badges
+without a second walk. It applies git's own filters (so `core.autocrlf` doesn't make every file look changed),
 detects binaries, finds renames (including an unstaged delete + new file), and skips submodules.
-`git status` supplies the staged / partially-staged badge. Morphe never shells out to `git`.
+Morphe never shells out to `git`.
 
 **Live updates.** One recursive `notify` watch on the repository (plus its parent, to notice the
 repository itself being moved or deleted), debounced at 150 ms:
