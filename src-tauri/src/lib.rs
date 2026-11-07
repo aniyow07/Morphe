@@ -47,7 +47,7 @@ fn on_batch(app: &AppHandle, shared: &Mutex<Option<Session>>, batch: watch::Batc
         return;
     }
     let refs_moved = batch.git && session.refs_changed();
-    let result = if batch.full || (batch.git && session.git_state_changed()) {
+    let result = if batch.full || (batch.git && session.git_state_changed()) || (refs_moved && session.has_base()) {
         session.full_rescan()
     } else if !batch.paths.is_empty() {
         session.rescan_paths(batch.paths)
@@ -141,6 +141,74 @@ fn get_commit_file_text(state: State<AppState>, id: String, path: String) -> Cmd
     })
 }
 
+#[tauri::command]
+fn set_scan_options(state: State<AppState>, ignore_whitespace: bool, base: Option<String>) -> CmdResult<Snapshot> {
+    let mut guard = state.session.lock().unwrap();
+    let session = guard.as_mut().ok_or("No repository open")?;
+    session.set_scan_options(ignore_whitespace, base).map_err(|e| e.message().to_string())?;
+    let root = session.root.to_string_lossy().into_owned();
+    let mut snapshot = session.snapshot(Default::default());
+    let live: Vec<&str> = snapshot.files.iter().map(|f| f.path.as_str()).collect();
+    snapshot.viewed = state.store.prune_viewed(&root, &live);
+    Ok(snapshot)
+}
+
+/// Open `path` (relative to the repo) at `line` in an editor. `editor` is a command such as
+/// "code"; empty means the OS default app for the file.
+#[tauri::command]
+fn open_in_editor(state: State<AppState>, path: String, line: Option<u32>, editor: String) -> CmdResult<()> {
+    let root = root_of(&state)?;
+    if path.split(['/', '\\']).any(|p| p == "..") {
+        return Err("Path is outside the repository".into());
+    }
+    let full = root.join(&path).to_string_lossy().into_owned();
+    let ed = editor.trim();
+    let mut cmd = if ed.is_empty() {
+        system_open(&full)
+    } else {
+        let mut c = shell_command(ed);
+        // VS Code and its forks need -g to take file:line; Zed and Sublime take it as is.
+        if matches!(ed, "code" | "cursor" | "windsurf" | "codium") {
+            c.arg("-g");
+        }
+        c.arg(match line {
+            Some(l) => format!("{full}:{l}"),
+            None => full.clone(),
+        });
+        c
+    };
+    let who = if ed.is_empty() { "the default app" } else { ed };
+    cmd.spawn().map(|_| ()).map_err(|e| format!("Could not start {who}: {e}"))
+}
+
+/// Editors install as .cmd shims on Windows (code.cmd), which only start through cmd.
+fn shell_command(program: &str) -> std::process::Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", program]).creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        c
+    }
+    #[cfg(not(windows))]
+    {
+        std::process::Command::new(program)
+    }
+}
+
+fn system_open(path: &str) -> std::process::Command {
+    let program = if cfg!(windows) {
+        "explorer"
+    } else if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    let mut c = std::process::Command::new(program);
+    c.arg(path);
+    c
+}
+
 fn with_session<T>(state: &State<AppState>, f: impl FnOnce(&mut Session) -> Result<T, git2::Error>) -> CmdResult<T> {
     let mut guard = state.session.lock().unwrap();
     let session = guard.as_mut().ok_or("No repository open")?;
@@ -218,7 +286,9 @@ pub fn run() {
             open_commit,
             get_commit_diff,
             get_commit_lines,
-            get_commit_file_text
+            get_commit_file_text,
+            set_scan_options,
+            open_in_editor
         ])
         .run(tauri::generate_context!())
         .expect("error while running Morphe");

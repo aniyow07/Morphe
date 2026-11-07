@@ -6,7 +6,7 @@ use std::collections::HashMap;
 fn main() {
     let path = std::env::args().nth(1).expect("usage: dump <repo>");
     let repo = git2::Repository::discover(&path).expect("not a git repository");
-    let scanned = git::scan(&repo, None, &HashMap::new()).expect("scan failed");
+    let scanned = git::scan(&repo, None, &HashMap::new(), &git::ScanOpts::default()).expect("scan failed");
     let mut files = Vec::new();
     let mut diffs = serde_json::Map::new();
     let mut texts = serde_json::Map::new();

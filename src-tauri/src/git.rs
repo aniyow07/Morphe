@@ -1,7 +1,7 @@
 //! Pure git logic: which files differ from HEAD, and what their diffs look like.
 //! No Tauri types here, so everything is unit-testable against temp-dir repos.
 
-use git2::{Delta, DiffFindOptions, DiffOptions, ErrorCode, Patch, Repository};
+use git2::{Delta, DiffFindOptions, DiffOptions, ErrorCode, Oid, Patch, Repository};
 use serde::Serialize;
 use similar::{capture_diff_slices, Algorithm, DiffOp};
 use std::collections::HashMap;
@@ -97,6 +97,22 @@ pub struct Scanned {
     pub fingerprint: u64,
 }
 
+/// What a scan compares against, and how.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ScanOpts {
+    /// Compare against this commit's tree instead of HEAD (e.g. the merge base with `main`).
+    pub base: Option<Oid>,
+    /// Ignore whitespace-only changes; files left with no changes drop out of the list.
+    pub ignore_ws: bool,
+}
+
+/// Merge base of HEAD and the tip of local branch `name`.
+pub fn merge_base_with(repo: &Repository, name: &str) -> Result<Oid, git2::Error> {
+    let tip = repo.find_branch(name, git2::BranchType::Local)?.get().peel_to_commit()?.id();
+    let head = repo.head()?.peel_to_commit()?.id();
+    repo.merge_base(head, tip)
+}
+
 /// Scan the working tree against HEAD (or the empty tree when there are no commits).
 ///
 /// With `paths`, only those files or directories are looked at. `prev` lets unchanged
@@ -105,13 +121,18 @@ pub fn scan(
     repo: &Repository,
     paths: Option<&[String]>,
     prev: &HashMap<String, Scanned>,
+    sopts: &ScanOpts,
 ) -> Result<Vec<Scanned>, git2::Error> {
     let workdir = repo
         .workdir()
         .ok_or_else(|| git2::Error::from_str("bare repositories are not supported"))?
         .to_path_buf();
-    let head_tree = head_tree(repo)?;
+    let head_tree = match sopts.base {
+        Some(id) => Some(repo.find_commit(id)?.tree()?),
+        None => head_tree(repo)?,
+    };
     let index = repo.index()?;
+    let opt_key = [sopts.base.map(|o| o.as_bytes().to_vec()).unwrap_or_default(), vec![sopts.ignore_ws as u8]].concat();
 
     let mut opts = DiffOptions::new();
     opts.include_untracked(true)
@@ -120,7 +141,8 @@ pub fn scan(
         .ignore_submodules(true)
         .include_typechange(true)
         .context_lines(3)
-        .max_size(MAX_FILE_BYTES as i64);
+        .max_size(MAX_FILE_BYTES as i64)
+        .ignore_whitespace(sopts.ignore_ws);
     if let Some(paths) = paths {
         opts.disable_pathspec_match(true);
         for p in paths {
@@ -132,7 +154,8 @@ pub fn scan(
     // without a second walk of the working tree (the expensive part on large repos).
     let mut diff = repo.diff_tree_to_index(head_tree.as_ref(), Some(&index), Some(&mut opts))?;
     let workdir_diff = repo.diff_index_to_workdir(Some(&index), Some(&mut opts))?;
-    let staged = staged_map(&diff, &workdir_diff);
+    // Staged badges are relative to HEAD, so they only mean something when comparing to it.
+    let staged = if sopts.base.is_none() { staged_map(&diff, &workdir_diff) } else { HashMap::new() };
     diff.merge(&workdir_diff)?;
     let mut find = DiffFindOptions::new();
     find.renames(true).for_untracked(true);
@@ -152,11 +175,15 @@ pub fn scan(
             &size.to_le_bytes(),
             &mtime.to_le_bytes(),
             old_path.as_deref().unwrap_or("").as_bytes(),
+            &opt_key,
         ]);
         let staged_state = staged.get(&path).copied().unwrap_or(Staged::None);
 
         if let Some(p) = prev.get(&path) {
             if p.fingerprint == fingerprint {
+                if sopts.ignore_ws && is_ws_only(status, &p.diff) {
+                    continue;
+                }
                 let mut entry = p.entry.clone();
                 entry.staged = staged_state;
                 out.push(Scanned { entry, diff: p.diff.clone(), fingerprint });
@@ -191,6 +218,10 @@ pub fn scan(
                 ),
             }
         };
+
+        if sopts.ignore_ws && is_ws_only(status, &diff_obj) {
+            continue;
+        }
 
         let diff_hash = match diff_obj.kind {
             Kind::Text => hash_text_diff(status, &diff_obj),
@@ -239,6 +270,11 @@ pub(crate) fn describe(delta: &git2::DiffDelta) -> Option<(&'static str, String,
     let path = delta.new_file().path().or(delta.old_file().path()).map(path_str)?;
     let old_path = (status == "R").then(|| delta.old_file().path().map(path_str)).flatten();
     Some((status, path, old_path))
+}
+
+/// A modified text file whose diff is empty: every change was whitespace.
+fn is_ws_only(status: &str, d: &FileDiff) -> bool {
+    status == "M" && matches!(d.kind, Kind::Text) && d.hunks.is_empty()
 }
 
 fn head_tree(repo: &Repository) -> Result<Option<git2::Tree<'_>>, git2::Error> {

@@ -50,7 +50,7 @@ impl Fixture {
     }
 
     fn scan(&self) -> Vec<Scanned> {
-        scan(&self.repo, None, &HashMap::new()).unwrap()
+        scan(&self.repo, None, &HashMap::new(), &ScanOpts::default()).unwrap()
     }
 
     fn entry(&self, path: &str) -> FileEntry {
@@ -184,7 +184,7 @@ fn path_limited_scan_only_returns_requested_paths() {
     f.write("a.txt", "a\n");
     f.write("b.txt", "b\n");
     f.write("sub/c.txt", "c\n");
-    let only = scan(&f.repo, Some(&["a.txt".to_string(), "sub".to_string()]), &HashMap::new()).unwrap();
+    let only = scan(&f.repo, Some(&["a.txt".to_string(), "sub".to_string()]), &HashMap::new(), &ScanOpts::default()).unwrap();
     let mut paths: Vec<_> = only.iter().map(|s| s.entry.path.as_str()).collect();
     paths.sort();
     assert_eq!(paths, ["a.txt", "sub/c.txt"]);
@@ -196,7 +196,7 @@ fn unchanged_files_reuse_previous_diff() {
     f.write("a.txt", "a\n");
     let first = f.scan();
     let prev: HashMap<_, _> = first.into_iter().map(|s| (s.entry.path.clone(), s)).collect();
-    let second = scan(&f.repo, None, &prev).unwrap();
+    let second = scan(&f.repo, None, &prev, &ScanOpts::default()).unwrap();
     assert!(Arc::ptr_eq(&second[0].diff, &prev["a.txt"].diff));
 }
 
@@ -320,4 +320,38 @@ fn list_dir_skips_ignored_but_keeps_tracked() {
     let expect = [("src", true), (".gitignore", false), ("keep.log", false), ("Zeta.txt", false)];
     assert_eq!(names, expect.map(|(n, d)| (n.to_string(), d)));
     assert_eq!(list_dir(&f.repo, "src").unwrap(), [DirEntry { name: "main.rs".into(), dir: false }]);
+}
+
+#[test]
+fn ignore_whitespace_drops_whitespace_only_files() {
+    let f = Fixture::new();
+    f.write("a.txt", "one\ntwo\n");
+    f.write("b.txt", "x\n");
+    f.commit_all();
+    f.write("a.txt", "one  \n  two\n");
+    f.write("b.txt", "y\n");
+    let opts = ScanOpts { base: None, ignore_ws: true };
+    let paths: Vec<String> = scan(&f.repo, None, &HashMap::new(), &opts).unwrap().into_iter().map(|s| s.entry.path).collect();
+    assert_eq!(paths, vec!["b.txt"]);
+    assert_eq!(f.scan().len(), 2);
+}
+
+#[test]
+fn base_compares_against_merge_base() {
+    let f = Fixture::new();
+    f.write("a.txt", "base\n");
+    f.commit_all();
+    let head = f.repo.head().unwrap().peel_to_commit().unwrap();
+    f.repo.branch("main2", &head, false).unwrap();
+    f.write("a.txt", "committed\n");
+    f.write("c.txt", "new\n");
+    f.commit_all();
+    f.write("a.txt", "committed and edited\n");
+    // Against HEAD only the uncommitted edit shows; against the branch point, all of it.
+    assert_eq!(f.scan().len(), 1);
+    let base = merge_base_with(&f.repo, "main2").unwrap();
+    let opts = ScanOpts { base: Some(base), ignore_ws: false };
+    let mut paths: Vec<String> = scan(&f.repo, None, &HashMap::new(), &opts).unwrap().into_iter().map(|s| s.entry.path).collect();
+    paths.sort();
+    assert_eq!(paths, vec!["a.txt", "c.txt"]);
 }

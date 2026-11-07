@@ -55,6 +55,9 @@ pub struct Session {
     walk: Option<Walk>,
     commits: HashMap<Oid, CommitData>,
     commit_order: VecDeque<Oid>,
+    /// Scan options; `base_branch` is re-resolved to a merge base on every full rescan.
+    opts: git::ScanOpts,
+    base_branch: Option<String>,
 }
 
 /// Opened commits kept in memory (their file lists and any diffs built so far).
@@ -85,6 +88,8 @@ impl Session {
             walk: None,
             commits: HashMap::new(),
             commit_order: VecDeque::new(),
+            opts: git::ScanOpts::default(),
+            base_branch: None,
         };
         s.full_rescan().map_err(|e| e.message().to_string())?;
         Ok(s)
@@ -117,12 +122,28 @@ impl Session {
         let (results, branch, state_key, refs_key) = with_retry(|| {
             let repo = self.repo()?;
             let state_key = git::state_key(&repo)?;
-            Ok((git::scan(&repo, None, &self.files)?, git::branch_name(&repo), state_key, git::refs_key(&repo)))
+            self.opts.base = match &self.base_branch {
+                Some(b) => Some(git::merge_base_with(&repo, b)?),
+                None => None,
+            };
+            Ok((git::scan(&repo, None, &self.files, &self.opts)?, git::branch_name(&repo), state_key, git::refs_key(&repo)))
         })?;
         self.branch = branch;
         self.state_key = state_key;
         self.refs_key = refs_key;
         Ok(self.apply(results, |_| true))
+    }
+
+    /// Change what the scan compares against and whether whitespace counts, then rescan.
+    pub fn set_scan_options(&mut self, ignore_ws: bool, base_branch: Option<String>) -> Result<Change, git2::Error> {
+        self.opts.ignore_ws = ignore_ws;
+        self.base_branch = base_branch;
+        self.full_rescan()
+    }
+
+    /// Whether a branch is being compared against (its tip moving changes the diff).
+    pub fn has_base(&self) -> bool {
+        self.base_branch.is_some()
     }
 
     /// Something under .git changed. Only HEAD or the index's entries affect the diff; tools
@@ -188,7 +209,7 @@ impl Session {
             }
         }
         let paths: Vec<String> = set.into_iter().collect();
-        let results = with_retry(|| git::scan(&self.repo()?, Some(&paths), &self.files))?;
+        let results = with_retry(|| git::scan(&self.repo()?, Some(&paths), &self.files, &self.opts))?;
         let in_scope = |p: &str| {
             paths.iter().any(|s| p == s || (p.starts_with(s.as_str()) && p.as_bytes().get(s.len()) == Some(&b'/')))
         };
