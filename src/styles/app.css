@@ -838,6 +838,22 @@ kbd {
   display: flex;
   gap: var(--s-2);
 }
+.ch-fold svg {
+  transform: rotate(90deg);
+  transition: transform var(--t-fast) var(--ease-out);
+}
+.ch-fold[aria-expanded="false"] svg {
+  transform: rotate(0deg);
+}
+/* Folded: just the title on one line, so the file list gets the room. */
+.commit-head.folded .ch-body,
+.commit-head.folded .ch-meta,
+.commit-head.folded .ch-stats {
+  display: none;
+}
+.commit-head.folded .ch-sum {
+  -webkit-line-clamp: 1;
+}
 .ch-stats {
   display: flex;
   align-items: baseline;

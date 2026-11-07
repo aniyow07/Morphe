@@ -111,7 +111,16 @@ export function historyPanel(actions: HistoryActions) {
     if (t.closest(".ch-back")) openDetail(false);
     else if (t.closest(".ch-prev")) stepCommit(-1, actions);
     else if (t.closest(".ch-next")) stepCommit(1, actions);
-    else if (t.closest(".ch-body")) head.classList.toggle("expanded");
+    else if (t.closest(".ch-fold")) {
+      head.classList.toggle("folded");
+      const folded = head.classList.contains("folded");
+      t.closest(".ch-fold")!.setAttribute("aria-expanded", String(!folded));
+      try {
+        localStorage.setItem("morphe.commitFolded", folded ? "1" : "");
+      } catch {
+        /* not persisted */
+      }
+    } else if (t.closest(".ch-body")) head.classList.toggle("expanded");
   });
 
   let rendered: CommitInfo[] = [];
@@ -169,13 +178,20 @@ export function historyPanel(actions: HistoryActions) {
     if (open && navKey !== headId) {
       headId = navKey;
       head.classList.remove("expanded");
+      let folded = false;
+      try {
+        folded = !!localStorage.getItem("morphe.commitFolded");
+      } catch {
+        /* default: open */
+      }
+      head.classList.toggle("folded", folded);
       const c = open.commit;
       const add = open.files.reduce((n, f) => n + f.additions, 0);
       const del = open.files.reduce((n, f) => n + f.deletions, 0);
       const n = open.files.length;
       head.innerHTML =
         `<div class="ch-nav"><button class="ch-back" data-tip="Back to commits" data-kbd="Esc">${icon.back}<span>Commits</span></button>` +
-        `<span class="ch-steps"><button class="tgl ch-prev" aria-label="Newer commit" data-tip="Newer commit" data-kbd="Shift+K"${i <= 0 ? " disabled" : ""}>${icon.up}</button>` +
+        `<span class="ch-steps"><button class="tgl ch-fold" aria-expanded="${!folded}" aria-label="Show or hide commit details" data-tip="Show or hide details">${icon.chevron}</button><button class="tgl ch-prev" aria-label="Newer commit" data-tip="Newer commit" data-kbd="Shift+K"${i <= 0 ? " disabled" : ""}>${icon.up}</button>` +
         `<button class="tgl ch-next" aria-label="Older commit" data-tip="Older commit" data-kbd="Shift+J"${i >= H.commits.length - 1 && H.done ? " disabled" : ""}>${icon.down}</button></span></div>` +
         `<div class="ch-sum">${esc(c.summary || "(no message)")}</div>` +
         (open.body ? `<div class="ch-body" data-tip="Show the full message">${esc(open.body)}</div>` : "") +
