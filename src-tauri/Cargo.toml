@@ -1,0 +1,32 @@
+[package]
+name = "morphe"
+version = "0.1.0"
+description = "A fast, live, read-only viewer of a git working-tree diff"
+edition = "2021"
+rust-version = "1.80"
+
+[lib]
+name = "morphe_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
+similar = "3"
+notify = "8"
+notify-debouncer-full = "0.6"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true

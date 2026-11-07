@@ -1,0 +1,122 @@
+// App state: one plain object, a change signal, and the derived file list.
+import type { FileEntry } from "./api";
+
+export type Screen = "loading" | "welcome" | "repo" | "gone";
+export type ViewState = "unviewed" | "viewed" | "stale";
+
+export interface Prefs {
+  follow: boolean;
+  hideViewed: boolean;
+  group: boolean;
+  wrap: boolean;
+  sidebarWidth: number;
+  mdPreview: boolean;
+}
+
+const PREFS_KEY = "morphe.prefs";
+const defaults: Prefs = { follow: false, hideViewed: false, group: false, wrap: false, sidebarWidth: 300, mdPreview: false };
+
+function loadPrefs(): Prefs {
+  try {
+    return { ...defaults, ...JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") };
+  } catch {
+    return { ...defaults };
+  }
+}
+
+export const state = {
+  screen: "loading" as Screen,
+  root: "",
+  name: "",
+  branch: "",
+  files: new Map<string, FileEntry>(),
+  viewed: {} as Record<string, string>,
+  selected: null as string | null,
+  filter: "",
+  /** Files updated live since the user last looked at them. */
+  updated: new Set<string>(),
+  collapsed: new Set<string>(),
+  prefs: loadPrefs(),
+  error: "",
+};
+
+export function savePrefs() {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(state.prefs));
+  } catch {
+    /* storage unavailable: prefs just won't persist */
+  }
+}
+
+// ---- change signal (render batched to one frame) ----
+
+type Listener = () => void;
+const listeners: Listener[] = [];
+let queued = false;
+
+export function subscribe(fn: Listener) {
+  listeners.push(fn);
+}
+
+export function changed() {
+  if (queued) return;
+  queued = true;
+  requestAnimationFrame(() => {
+    queued = false;
+    for (const fn of listeners) fn();
+  });
+}
+
+// ---- derived ----
+
+export function viewState(f: FileEntry): ViewState {
+  const h = state.viewed[f.path];
+  if (!h) return "unviewed";
+  return h === f.diffHash ? "viewed" : "stale";
+}
+
+export function splitPath(p: string): { dir: string; name: string } {
+  const i = p.lastIndexOf("/");
+  return i < 0 ? { dir: "", name: p } : { dir: p.slice(0, i), name: p.slice(i + 1) };
+}
+
+/** Every space-separated term must appear in the path (case-insensitive). */
+export function matches(path: string, query: string): boolean {
+  const p = path.toLowerCase();
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((t) => p.includes(t));
+}
+
+/** Files in display order after filter and hide-viewed. */
+export function visibleFiles(): FileEntry[] {
+  const out: FileEntry[] = [];
+  for (const f of state.files.values()) {
+    if (state.filter && !matches(f.path, state.filter)) continue;
+    if (state.prefs.hideViewed && viewState(f) === "viewed" && f.path !== state.selected) continue;
+    out.push(f);
+  }
+  return out.sort(state.prefs.group ? byDirThenName : byPath);
+}
+
+const byPath = (a: FileEntry, b: FileEntry) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+function byDirThenName(a: FileEntry, b: FileEntry) {
+  const x = splitPath(a.path);
+  const y = splitPath(b.path);
+  if (x.dir !== y.dir) return x.dir < y.dir ? -1 : 1;
+  return x.name < y.name ? -1 : x.name > y.name ? 1 : 0;
+}
+
+export function totals() {
+  let add = 0;
+  let del = 0;
+  let viewed = 0;
+  for (const f of state.files.values()) {
+    add += f.additions;
+    del += f.deletions;
+    if (viewState(f) === "viewed") viewed++;
+  }
+  return { files: state.files.size, add, del, viewed };
+}
