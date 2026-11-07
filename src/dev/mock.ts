@@ -61,6 +61,7 @@ export async function installMock() {
     await new Promise((r) => setTimeout(r, 200));
     if (q.get("scroll")) sc.scrollTop = Number(q.get("scroll"));
     sc.dispatchEvent(new Event("scroll"));
+    if (q.has("gone")) emit("repo:gone", fx.snapshot.root);
     if (q.get("touch")) for (const p of q.get("touch")!.split(",")) (window as any).__touch(p);
     if (q.get("palette") !== null) {
       document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "p", ctrlKey: true, bubbles: true }));

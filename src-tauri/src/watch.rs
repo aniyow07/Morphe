@@ -36,6 +36,11 @@ pub fn start(root: PathBuf, git_dir: PathBuf, on_batch: impl Fn(Batch) + Send + 
         }
     })?;
     debouncer.watch(&root, RecursiveMode::Recursive)?;
+    // A recursive watch doesn't report the root itself being moved or deleted; watching the
+    // parent (non-recursively) does, so the UI can say the repository is gone.
+    if let Some(parent) = root.parent() {
+        let _ = debouncer.watch(parent, RecursiveMode::NonRecursive);
+    }
     // Linked worktrees and `--separate-git-dir` keep the git dir outside the tree.
     if !git_dir.starts_with(&root) {
         debouncer.watch(&git_dir, RecursiveMode::Recursive)?;
@@ -137,5 +142,34 @@ mod live_tests {
         }
         assert!(paths.contains(&"src.txt".to_string()), "got {paths:?}");
         assert!(!paths.iter().any(|p| p.starts_with("build")), "ignored path leaked: {paths:?}");
+    }
+}
+
+#[cfg(test)]
+mod gone_tests {
+    use super::*;
+    use std::sync::mpsc;
+
+    #[test]
+    fn moving_the_repo_away_reports_gone() {
+        let parent = tempfile::TempDir::new().unwrap();
+        let root = parent.path().join("repo");
+        std::fs::create_dir(&root).unwrap();
+        Repository::init(&root).unwrap();
+        let (tx, rx) = mpsc::channel();
+        let w = start(root.clone(), root.join(".git"), move |b| {
+            let _ = tx.send(b);
+        })
+        .unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        // Windows refuses to rename a directory with an open watch handle; deleting its
+        // contents still has to be noticed. Try the move first, fall back to deletion.
+        if std::fs::rename(&root, parent.path().join("moved")).is_err() {
+            std::fs::remove_dir_all(root.join(".git")).unwrap();
+        }
+        let gone = rx.recv_timeout(Duration::from_secs(5)).map(|b| b.gone).unwrap_or(false)
+            || rx.recv_timeout(Duration::from_secs(2)).map(|b| b.gone).unwrap_or(false);
+        drop(w);
+        assert!(gone);
     }
 }
