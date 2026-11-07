@@ -1773,9 +1773,7 @@ kbd {
 }
 
 /* History: only the filter; follow and viewed don't apply to commits */
-.sidebar.is-history .sb-tools {
-  display: none;
-}
+
 
 /* ---------- "All files" tree ---------- */
 

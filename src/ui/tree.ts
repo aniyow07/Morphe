@@ -2,7 +2,7 @@
 // status color. Folders load one level at a time, so a huge repository costs only what's open.
 import { api, type DirEntry, type FileEntry } from "../api";
 import { esc, fmt, h, icon, STATUS_LABEL } from "../dom";
-import { changed, state } from "../state";
+import { changed, shownCommit, state } from "../state";
 
 /** Rows past this many in one folder are summarized instead of rendered. */
 const MAX_PER_DIR = 2000;
@@ -12,6 +12,8 @@ export const tree = {
   open: new Set<string>([""]),
   entries: new Map<string, DirEntry[]>(),
   loading: new Set<string>(),
+  /** Whose listings `entries` holds: a commit id, or null for the working tree. */
+  source: null as string | null,
 };
 
 export function resetTree() {
@@ -23,14 +25,17 @@ export function resetTree() {
 async function load(dir: string) {
   if (tree.loading.has(dir)) return;
   tree.loading.add(dir);
+  const src = tree.source;
+  let list: DirEntry[] = [];
   try {
-    tree.entries.set(dir, await api.listDir(dir));
+    list = await (src ? api.listCommitDir(src, dir) : api.listDir(dir));
   } catch {
-    tree.entries.set(dir, []); // gone meanwhile; the next change event corrects it
-  } finally {
-    tree.loading.delete(dir);
-    changed();
+    /* gone meanwhile; the next change event corrects it */
   }
+  if (tree.source !== src) return; // switched commit while loading
+  tree.entries.set(dir, list);
+  tree.loading.delete(dir);
+  changed();
 }
 
 const parentOf = (p: string) => p.slice(0, Math.max(0, p.lastIndexOf("/")));
@@ -91,7 +96,16 @@ let nextId = 0;
 
 /** The visible tree as row elements (reused between renders). */
 export function treeRows(): HTMLElement[] {
-  const idx = changeIndex(state.work);
+  // History shows the repository as of the opened commit; switching commits starts over
+  // (keeping which folders are open).
+  const src = state.mode === "history" ? shownCommit() : null;
+  if (src !== tree.source) {
+    tree.source = src;
+    tree.entries.clear();
+    tree.loading.clear();
+  }
+  const files = state.files;
+  const idx = changeIndex(files);
   const out: HTMLElement[] = [];
   const seen = new Set<string>();
 
@@ -138,7 +152,7 @@ export function treeRows(): HTMLElement[] {
         }));
         if (open) walk(path, depth + 1);
       } else {
-        const f = state.work.get(path);
+        const f = files.get(path);
         const sel = state.selected === path;
         const sig = f ? [f.status, f.additions, f.deletions, f.kind, sel, depth].join("|") : `${sel}|${depth}`;
         row(`f:${path}`, sig, () => ({

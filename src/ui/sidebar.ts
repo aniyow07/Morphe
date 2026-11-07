@@ -145,7 +145,9 @@ export function sidebar(actions: SidebarActions) {
     for (const t of toggles) {
       t.b.setAttribute("aria-pressed", String(state.prefs[t.key]));
       // Follow and viewed are about the working tree; grouping and hiding don't apply to the tree.
-      t.b.hidden = historyMode ? t.key !== "group" : state.prefs.allFiles && (t.key === "group" || t.key === "hideViewed");
+      t.b.hidden = historyMode
+        ? !(t.key === "allFiles" || (t.key === "group" && !state.prefs.allFiles))
+        : state.prefs.allFiles && (t.key === "group" || t.key === "hideViewed");
     }
     if (filter.value !== state.filter) filter.value = state.filter;
 

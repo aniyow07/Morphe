@@ -163,9 +163,11 @@ function byDirThenName(a: FileEntry, b: FileEntry) {
   return x.name < y.name ? -1 : x.name > y.name ? 1 : 0;
 }
 
-/** The "All files" tree is on display (it applies to the working tree, without a filter). */
+/** The "All files" tree is on display: the working tree in Changes, or the repository as of
+ *  the opened commit in History (never with a filter). */
 export function treeMode(): boolean {
-  return state.mode === "changes" && state.prefs.allFiles && !state.filter;
+  if (!state.prefs.allFiles || state.filter) return false;
+  return state.mode === "changes" || (state.history.detail && !!state.history.open);
 }
 
 /** The commit whose files are on display, or null for the working tree. */

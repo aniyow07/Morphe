@@ -201,10 +201,35 @@ impl CommitData {
     /// Full text as of this commit (the old text for a deleted file); `None` for binary or
     /// oversized content.
     pub fn text(&self, repo: &Repository, path: &str) -> Result<Option<String>, git2::Error> {
-        let Some(&(old_id, new_id)) = self.blobs.get(path) else { return Ok(None) };
+        let Some(&(old_id, new_id)) = self.blobs.get(path) else {
+            // A file this commit didn't touch: its content as of the commit.
+            let oid = Oid::from_str(&self.changes.commit.id)?;
+            let tree = repo.find_commit(oid)?.tree()?;
+            let Ok(entry) = tree.get_path(std::path::Path::new(path)) else { return Ok(None) };
+            return Ok(git::text_of(blob_bytes(repo, entry.id())?));
+        };
         let bytes = blob_bytes(repo, if new_id.is_zero() { old_id } else { new_id })?;
         Ok(git::text_of(bytes))
     }
+}
+
+/// One folder of the repository as of commit `id`: folders first, then by name.
+pub fn list_tree_dir(repo: &Repository, id: &str, rel: &str) -> Result<Vec<git::DirEntry>, git2::Error> {
+    let root = repo.find_commit(Oid::from_str(id)?)?.tree()?;
+    let tree = if rel.is_empty() {
+        root
+    } else {
+        let entry = root.get_path(std::path::Path::new(rel))?;
+        repo.find_tree(entry.id())?
+    };
+    let mut out: Vec<git::DirEntry> = tree
+        .iter()
+        // Submodules (commits) have no content here; skip them like the diff does.
+        .filter(|e| e.kind() != Some(git2::ObjectType::Commit))
+        .map(|e| git::DirEntry { name: e.name().unwrap_or_default().to_string(), dir: e.kind() == Some(git2::ObjectType::Tree) })
+        .collect();
+    out.sort_by(|a, b| b.dir.cmp(&a.dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    Ok(out)
 }
 
 /// Drop a final paragraph of git trailers (`Signed-off-by: …`, `Co-Authored-By: …`). Real

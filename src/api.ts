@@ -104,6 +104,8 @@ export const api = {
   forgetRecent: (path: string) => invoke<void>("forget_recent", { path }),
   launchPath: () => invoke<string | null>("launch_path"),
   listDir: (path: string) => invoke<DirEntry[]>("list_dir", { path }),
+  /** A folder of the repository as of a commit. */
+  listCommitDir: (id: string, path: string) => invoke<DirEntry[]>("list_commit_dir", { id, path }),
   listBranches: () => invoke<Branch[]>("list_branches"),
   /** Rescan with whitespace ignored or not, against HEAD or the merge base with `base`. */
   setScanOptions: (ignoreWhitespace: boolean, base: string | null) => invoke<Snapshot>("set_scan_options", { ignoreWhitespace, base }),

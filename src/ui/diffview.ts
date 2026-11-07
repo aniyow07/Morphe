@@ -290,7 +290,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
     }
 
     if (!f) {
-      const text = await source.text(path, null).catch(() => null);
+      const text = await source.text(path, commit).catch(() => null);
       clearTimeout(skel);
       if (my !== gen) return;
       renderPlain(path, text);

@@ -38,6 +38,8 @@ export async function installMock() {
           return (fx.opened?.[args.id]?.texts[args.path] ?? "").split("\n").slice(args.start - 1, args.end);
         case "get_commit_file_text":
           return fx.opened?.[args.id]?.texts[args.path] ?? null;
+        case "list_commit_dir":
+          return fx.dirs?.[args.path] ?? [];
         case "set_scan_options":
           // The mock has no git: whitespace-only files can't be detected, so drop nothing.
           (window as any).__scanOpts = args;

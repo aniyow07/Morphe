@@ -175,3 +175,26 @@ fn trailers_are_dropped_from_the_body() {
     assert_eq!(strip_trailers("Note: this is prose, not a trailer list"), "Note: this is prose, not a trailer list");
     assert_eq!(strip_trailers("Plain body."), "Plain body.");
 }
+
+#[test]
+fn tree_listing_and_text_as_of_a_commit() {
+    let r = Repo::new();
+    r.write("b.txt", "old\n");
+    r.write("src/a.rs", "fn a() {}\n");
+    let first = r.commit("one");
+    r.write("b.txt", "new\n");
+    r.write("src/c.rs", "fn c() {}\n");
+    let second = r.commit("two");
+
+    let names = |id: Oid, dir: &str| -> Vec<String> {
+        list_tree_dir(&r.repo, &id.to_string(), dir).unwrap().into_iter().map(|e| e.name).collect()
+    };
+    assert_eq!(names(first, ""), vec!["src", "b.txt"]);
+    assert_eq!(names(first, "src"), vec!["a.rs"]);
+    assert_eq!(names(second, "src"), vec!["a.rs", "c.rs"]);
+
+    // An untouched file reads as it was at that commit.
+    let data = CommitData::load(&r.repo, second).unwrap();
+    assert_eq!(data.text(&r.repo, "src/a.rs").unwrap().as_deref(), Some("fn a() {}\n"));
+    assert_eq!(data.text(&r.repo, "b.txt").unwrap().as_deref(), Some("new\n"));
+}

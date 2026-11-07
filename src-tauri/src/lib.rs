@@ -142,6 +142,11 @@ fn get_commit_file_text(state: State<AppState>, id: String, path: String) -> Cmd
 }
 
 #[tauri::command]
+fn list_commit_dir(state: State<AppState>, id: String, path: String) -> CmdResult<Vec<git::DirEntry>> {
+    with_session(&state, |s| history::list_tree_dir(&s.repo()?, &id, &path))
+}
+
+#[tauri::command]
 fn set_scan_options(state: State<AppState>, ignore_whitespace: bool, base: Option<String>) -> CmdResult<Snapshot> {
     let mut guard = state.session.lock().unwrap();
     let session = guard.as_mut().ok_or("No repository open")?;
@@ -288,7 +293,8 @@ pub fn run() {
             get_commit_lines,
             get_commit_file_text,
             set_scan_options,
-            open_in_editor
+            open_in_editor,
+            list_commit_dir
         ])
         .run(tauri::generate_context!())
         .expect("error while running Morphe");
