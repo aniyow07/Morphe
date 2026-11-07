@@ -406,10 +406,10 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
     diff.hunks.forEach((hk, i) => {
       const gapStart = prevNewEnd + 1;
       const gapEnd = hk.newStart - 1;
-      if (gapEnd >= gapStart && f.status !== "D") {
-        body.append(gapRow(gapStart, gapEnd, prevOldEnd - prevNewEnd));
-      }
-      body.append(hunkRow(hk));
+      // One separator per hunk: the collapsed lines above it, labelled with the hunk's section
+      // (function or heading). The @@ ranges are in the tooltip; line numbers already show them.
+      if (gapEnd >= gapStart && f.status !== "D") body.append(gapRow(gapStart, gapEnd, prevOldEnd - prevNewEnd, hk));
+      else if (hk.section && i > 0) body.append(hunkRow(hk));
       const rows = split ? pairRows(hk.lines) : hk.lines.map((a, aj) => ({ a, aj }));
       for (let off = 0; off < rows.length; off += CHUNK) {
         body.append(addChunk(rows.slice(off, off + CHUNK), null, i).el);
@@ -458,15 +458,21 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
 
   function hunkRow(hk: Hunk) {
     const range = `@@ -${hk.oldStart},${hk.oldLines} +${hk.newStart},${hk.newLines} @@`;
-    return h("div", { class: "hunk", role: "row", html: `<span class="hunk-range">${range}</span><span class="hunk-sec">${esc(hk.section)}</span>` });
+    return h("div", { class: "hunk", role: "row", title: range, html: `<span class="hunk-sec">${esc(hk.section)}</span>` });
   }
 
-  function gapRow(start: number, end: number, delta: number) {
+  function gapRow(start: number, end: number, delta: number, hk?: Hunk) {
     const n = end - start + 1;
+    const range = hk ? ` (@@ -${hk.oldStart},${hk.oldLines} +${hk.newStart},${hk.newLines} @@)` : "";
     return h(
       "button",
-      { class: "gap", "data-start": start, "data-end": end, "data-delta": delta, "data-tip": "Show unchanged lines" },
-      h("span", { class: "gap-label" }, `${fmt.format(n)} unchanged ${n === 1 ? "line" : "lines"}`),
+      { class: "gap", "data-start": start, "data-end": end, "data-delta": delta, "data-tip": `Show unchanged lines${range}` },
+      h(
+        "span",
+        { class: "gap-label" },
+        h("span", { class: "gap-n" }, `${fmt.format(n)} unchanged ${n === 1 ? "line" : "lines"}`),
+        hk?.section ? h("span", { class: "gap-sec" }, hk.section) : "",
+      ),
     );
   }
 

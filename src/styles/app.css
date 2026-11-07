@@ -1154,7 +1154,7 @@ kbd {
   display: flex;
   align-items: center;
   gap: var(--s-12);
-  height: 28px;
+  height: 24px;
   padding-left: 126px;
   background: var(--hunk-bg);
   color: var(--hunk-text);
@@ -1208,6 +1208,21 @@ kbd {
 .gap-label {
   position: sticky;
   left: 126px;
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-12);
+  min-width: 0;
+}
+.gap-sec {
+  font: 400 var(--fs-12) / 1 var(--font-code);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60vw;
+}
+.gap:hover .gap-sec {
+  color: inherit;
 }
 
 /* syntax */
