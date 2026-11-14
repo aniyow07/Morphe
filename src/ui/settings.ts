@@ -226,7 +226,7 @@ export function settings(hooks: { refreshDiff: () => void }) {
 
   function general() {
     return (
-      row("Open files in", "Used by the open button above each file, and by double-clicking a line.", seg("editor", "Open files in")) +
+      row("Open files in", "Used by the open button above each file, and by double-clicking a line. VS Code, Cursor and Zed open the whole repository, then the file.", seg("editor", "Open files in")) +
       row("Reopen last repository", "On launch, open the most recent repository instead of the start screen.", seg("reopenLast", "Reopen last repository")) +
       row("Follow latest edit", "Jump to each file as it changes. Same as the toggle above the file list.", seg("follow", "Follow latest edit"))
     );

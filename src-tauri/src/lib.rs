@@ -173,6 +173,11 @@ fn open_in_editor(state: State<AppState>, path: String, line: Option<u32>, edito
     } else {
         let mut c = shell_command(ed);
         // VS Code and its forks need -g to take file:line; Zed and Sublime take it as is.
+        // Editors that take a folder open the repository as the project (reusing its window
+        // when it is already open) and then go to the file inside it.
+        if matches!(ed, "code" | "cursor" | "windsurf" | "codium" | "zed" | "subl") {
+            c.arg(root.as_os_str());
+        }
         if matches!(ed, "code" | "cursor" | "windsurf" | "codium") {
             c.arg("-g");
         }
