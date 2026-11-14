@@ -27,6 +27,8 @@ export interface Prefs {
   motion: "system" | "reduce";
   /** With no folder passed on the command line, open the most recent repository. */
   reopenLast: boolean;
+  /** Share of the width the old side takes in side-by-side view. */
+  splitRatio: number;
   /** Hide whitespace-only changes in Changes. */
   ignoreWs: boolean;
   /** Editor command for "Open in editor" ("code", "cursor", "zed"); "" is the OS default app. */
@@ -34,7 +36,7 @@ export interface Prefs {
 }
 
 const PREFS_KEY = "morphe.prefs";
-const defaults: Prefs = { follow: false, hideViewed: false, group: false, wrap: false, sidebarWidth: 300, mdPreview: false, split: false, theme: "system", allFiles: false, darkTheme: "graphite", lightTheme: "paper", codeSize: "m", tabWidth: 4, syntax: true, density: "default", motion: "system", reopenLast: false, ignoreWs: false, editor: "code" };
+const defaults: Prefs = { follow: false, hideViewed: false, group: false, wrap: false, sidebarWidth: 300, mdPreview: false, split: false, theme: "system", allFiles: false, darkTheme: "graphite", lightTheme: "paper", codeSize: "m", tabWidth: 4, syntax: true, density: "default", motion: "system", reopenLast: false, ignoreWs: false, editor: "code", splitRatio: 0.5 };
 
 function loadPrefs(): Prefs {
   try {

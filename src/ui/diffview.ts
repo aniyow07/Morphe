@@ -5,6 +5,7 @@
 // stable while files change underneath.
 import { source, type FileDiff, type FileEntry, type Hunk, type Line } from "../api";
 import { copyText, esc, fmt, h, icon, modKey, STATUS_LABEL } from "../dom";
+import { fileIcon } from "../fileicons";
 import { highlightLines, loadLanguage, readyLanguage, type Seg } from "../highlight";
 import { isMarkdown, renderMarkdown } from "../markdown";
 import { changed, savePrefs, shownCommit, splitPath, state, treeMode, viewState } from "../state";
@@ -236,6 +237,42 @@ export function diffView(actions: {
     else if (act === "open") actions.openInEditor(current.path, info.lo);
   });
 
+  // ---- side by side: drag the middle line to give one side more room ----
+  const GUTTER = 74; // line number + sign columns of one side
+  function setSplit(r: number) {
+    r = Math.min(0.8, Math.max(0.2, r));
+    state.prefs.splitRatio = r;
+    scroller.style.setProperty("--split", String(r));
+    scroller.style.setProperty("--sl", `${r}fr`);
+    scroller.style.setProperty("--sr", `${1 - r}fr`);
+  }
+  setSplit(state.prefs.splitRatio);
+  scroller.addEventListener("pointerdown", (e) => {
+    const handle = (e.target as HTMLElement).closest<HTMLElement>(".split-handle");
+    if (!handle) return;
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add("dragging");
+    const box = handle.parentElement!.getBoundingClientRect();
+    const move = (ev: PointerEvent) => setSplit((ev.clientX - box.left - GUTTER) / (box.width - GUTTER * 2));
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener(
+      "pointerup",
+      () => {
+        handle.removeEventListener("pointermove", move);
+        handle.classList.remove("dragging");
+        savePrefs();
+        syncMap();
+      },
+      { once: true },
+    );
+  });
+  scroller.addEventListener("dblclick", (e) => {
+    if (!(e.target as HTMLElement).closest(".split-handle")) return;
+    setSplit(0.5);
+    savePrefs();
+  });
+
   // ---- change map and stepping between changes ----
   /** The first row of every run of changed lines, in document order. */
   let blocks: { c: Chunk; r: number }[] = [];
@@ -424,6 +461,7 @@ export function diffView(actions: {
       f.kind === "text" ? `<span class="add">+${fmt.format(f.additions)}</span><span class="del">−${fmt.format(f.deletions)}</span>` : "";
     const html =
       `<span class="st st-${f.status}" data-tip="${STATUS_LABEL[f.status]}">${f.status}</span>` +
+      fileIcon(f.path) +
       `<span class="fh-path" title="${esc(f.path)}">${rename}${dir ? `<span class="dr">${esc(dir)}/</span>` : ""}<span class="fn">${esc(name)}</span></span>` +
       `<span class="fh-tags">${tags}</span>` +
       `<span class="fh-counts">${counts}</span>` +
@@ -455,6 +493,7 @@ export function diffView(actions: {
     const { dir, name } = splitPath(path);
     const html =
       `<span class="st"></span>` +
+      fileIcon(path) +
       `<span class="fh-path" title="${esc(path)}">${dir ? `<span class="dr">${esc(dir)}/</span>` : ""}<span class="fn">${esc(name)}</span></span>` +
       `<span class="fh-tags"><span class="tag">Unchanged</span></span><span class="fh-counts"></span>` +
       `<span class="fh-tools">` +
@@ -647,6 +686,7 @@ export function diffView(actions: {
     if (diff.truncated) {
       body.append(notice(`Diff truncated after ${fmt.format(total)} lines. Open the file in your editor to see the rest.`, "notice-inline"));
     }
+    if (split) body.append(h("div", { class: "split-handle", role: "separator", "aria-orientation": "vertical", "aria-label": "Resize the two sides", "data-tip": "Drag to resize, double-click to reset" }));
     scroller.append(body);
     if (eager) chunks.forEach(fill);
     else fillVisible();
