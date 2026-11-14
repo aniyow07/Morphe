@@ -3,6 +3,7 @@
 // selected commit's files.
 import { api, type FileEntry } from "../api";
 import { esc, fmt, h, icon, modKey, STATUS_LABEL } from "../dom";
+import { fileIcon } from "../fileicons";
 import { changed, savePrefs, splitPath, state, subscribe, treeMode, viewState, visibleFiles, type Mode, type Prefs } from "../state";
 import { historyPanel, type HistoryActions } from "./history";
 import { toggleDir, treeRows } from "./tree";
@@ -260,6 +261,7 @@ export function sidebar(actions: SidebarActions) {
       const vwLabel = vs === "viewed" ? "Mark as not viewed" : "Mark as viewed";
       row.innerHTML =
         `<span class="st st-${f.status}" data-tip="${STATUS_LABEL[f.status]}">${f.status}</span>` +
+        fileIcon(f.path) +
         `<span class="nm"><span class="fn">${esc(name)}</span>${!state.prefs.group && dir ? `<span class="dr">${esc(dir)}</span>` : ""}</span>` +
         `<span class="mk">${vs === "stale" ? `<span class="stale" data-tip="Changed since viewed"></span>` : ""}${staged}<span class="upd" data-tip="Updated"></span></span>` +
         `<span class="ct">${counts}</span>` +

@@ -1,5 +1,6 @@
 // The palette: Ctrl/Cmd+P jumps to a file, Ctrl/Cmd+Shift+P (or a leading ">") runs a command.
 import { esc, h, icon, modKey } from "../dom";
+import { fileIcon } from "../fileicons";
 import { splitPath, state } from "../state";
 
 export interface Command {
@@ -76,7 +77,7 @@ export function palette(select: (path: string) => void, commands: () => Command[
             .map((p, i) => {
               const f = state.files.get(p)!;
               const { dir, name } = splitPath(p);
-              return `<div class="pal-opt" role="option" data-i="${i}" aria-selected="${i === active}"><span class="st st-${f.status}">${f.status}</span><span class="fn">${esc(name)}</span><span class="dr">${esc(dir)}</span></div>`;
+              return `<div class="pal-opt" role="option" data-i="${i}" aria-selected="${i === active}"><span class="st st-${f.status}">${f.status}</span>${fileIcon(p)}<span class="fn">${esc(name)}</span><span class="dr">${esc(dir)}</span></div>`;
             })
             .join("")
         : `<div class="pal-none">${state.files.size ? `No changed file matches “${esc(input.value)}”` : "No changed files to jump to"}</div>`;

@@ -2477,3 +2477,63 @@ kbd {
     animation: none;
   }
 }
+
+/* ---------- file type icons ---------- */
+
+.fi {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  align-self: center;
+  /* pull every brand color toward the text color so dark marks stay readable on dark themes */
+  fill: color-mix(in srgb, currentColor 68%, var(--text));
+}
+.fi-mono {
+  fill: var(--text-muted);
+}
+.fi-plain {
+  fill: none;
+  color: var(--text-faint);
+}
+.row.is-viewed .fi {
+  opacity: 0.55;
+}
+.fh .fi {
+  width: 16px;
+  height: 16px;
+}
+.row .st:empty {
+  background: none;
+}
+
+/* ---------- side by side: resizable middle line ---------- */
+
+.sr {
+  grid-template-columns: 52px 22px minmax(0, var(--sl, 1fr)) 52px 22px minmax(0, var(--sr, 1fr));
+}
+.diff.split {
+  position: relative;
+}
+.split-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(74px + (100% - 148px) * var(--split, 0.5));
+  width: 9px;
+  margin-left: -4px;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+}
+.split-handle::after {
+  content: "";
+  position: absolute;
+  inset: 0 4px;
+  background: transparent;
+  transition: background var(--t-fast) var(--ease-out);
+}
+.split-handle:hover::after,
+.split-handle.dragging::after {
+  inset: 0 3px;
+  background: var(--accent);
+}
