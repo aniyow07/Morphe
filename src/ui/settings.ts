@@ -248,8 +248,9 @@ export function settings(hooks: { refreshDiff: () => void }) {
     body.innerHTML = `<h3 class="set-h">${title}</h3>${content}`;
   }
 
-  function open(to?: Section) {
-    if (to) section = to;
+  function open(to?: Section | Event) {
+    // Also used directly as a click handler, which passes the event.
+    if (typeof to === "string") section = to;
     restoreFocus = document.activeElement;
     render();
     scrim.hidden = false;
