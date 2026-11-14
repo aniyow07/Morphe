@@ -66,7 +66,11 @@ export function titlebar(onRepoClick: () => void, onSettings: () => void, onBran
     stats.innerHTML = t.files
       ? `<span><b>${fmt.format(t.files)}</b> ${t.files === 1 ? "file" : "files"}</span>` +
         `<span class="add">+${fmt.format(t.add)}</span><span class="del">−${fmt.format(t.del)}</span>` +
-        (state.mode === "changes" ? `<span class="viewed-count"><b>${fmt.format(t.viewed)}</b>/${fmt.format(t.files)} viewed</span>` : "")
+        (state.mode === "changes"
+          ? `<span class="viewed-count${t.viewed === t.files ? " done" : ""}" data-tip="${t.viewed === t.files ? "Everything is viewed" : `${fmt.format(t.files - t.viewed)} left to view`}">` +
+            `<svg class="ring" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/>${t.viewed ? `<circle class="ring-v" cx="8" cy="8" r="6" pathLength="100" stroke-dasharray="${Math.round((t.viewed / t.files) * 100)} 100"/>` : ""}</svg>` +
+            `<span><b>${fmt.format(t.viewed)}</b> of ${fmt.format(t.files)} viewed</span></span>`
+          : "")
       : "";
   });
   return bar;
