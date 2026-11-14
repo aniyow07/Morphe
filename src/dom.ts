@@ -35,6 +35,8 @@ export const icon = {
   back: svg('<path d="M10 3.5L5.5 8l4.5 4.5"/>', 14),
   up: svg('<path d="M4 10l4-4 4 4"/>', 14),
   down: svg('<path d="M4 6l4 4 4-4"/>', 14),
+  copy: svg('<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5v-.5a1 1 0 0 0-1-1H3.5a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1H4"/>', 14),
+  command: svg('<path d="M3.5 5l3 3-3 3M8.5 11.5h4"/>', 14),
   external: svg('<path d="M9 2.5h4.5V7M13.5 2.5L7.5 8.5M12 9.5v3.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-8a.5.5 0 0 1 .5-.5H7"/>', 14),
   search: svg('<circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/>', 14),
   follow: svg('<circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.75" fill="currentColor" stroke="none"/>', 14),
@@ -68,3 +70,19 @@ export const STATUS_LABEL: Record<string, string> = {
 
 export const isMac = navigator.userAgent.includes("Mac");
 export const modKey = isMac ? "⌘" : "Ctrl";
+
+/** Write to the clipboard, falling back to a hidden field where the async API is blocked. */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = h("textarea", { style: "position:fixed;opacity:0" });
+    ta.value = text;
+    document.body.append(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  }
+}

@@ -4,7 +4,7 @@
 // until a chunk scrolls near the viewport, so the DOM stays small and scroll position is
 // stable while files change underneath.
 import { source, type FileDiff, type FileEntry, type Hunk, type Line } from "../api";
-import { esc, fmt, h, icon, modKey, STATUS_LABEL } from "../dom";
+import { copyText, esc, fmt, h, icon, modKey, STATUS_LABEL } from "../dom";
 import { highlightLines, loadLanguage, readyLanguage, type Seg } from "../highlight";
 import { isMarkdown, renderMarkdown } from "../markdown";
 import { changed, savePrefs, shownCommit, splitPath, state, treeMode, viewState } from "../state";
@@ -13,7 +13,10 @@ const CHUNK = 200;
 /** Code line height in px, from the --lh-code token (it follows the text size setting). */
 const rowH = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--lh-code")) || 20;
 const HIGHLIGHT_MAX_LINES = 5000;
-const OPEN_BTN = `<button class="tgl open-tgl" aria-label="Open in editor" data-tip="Open in editor (or double-click a line)">${icon.external}</button>`;
+const OPEN_BTN =
+  `<button class="tgl copy-tgl" aria-label="Copy path" data-tip="Copy path (Shift-click for the full path)" data-kbd="C">${icon.copy}</button>` +
+  `<button class="tgl open-tgl" aria-label="Open in editor" data-tip="Open in editor (or double-click a line)" data-kbd="O">${icon.external}</button>`;
+const MAP_BUCKETS = 300;
 const HIGHLIGHT_MAX_LINE_LEN = 2000;
 const EAGER_WRAP_LINES = 3000;
 
@@ -35,7 +38,13 @@ interface Chunk {
   filled: boolean;
 }
 
-export function diffView(actions: { toggleViewed: (path: string) => void; openInEditor: (path: string, line: number | null) => void }) {
+type Pos = [chunk: number, row: number];
+
+export function diffView(actions: {
+  toggleViewed: (path: string) => void;
+  openInEditor: (path: string, line: number | null) => void;
+  notify: (msg: string) => void;
+}) {
   const header = h("div", { class: "fh" });
   const scroller = h("div", { class: "diff-scroll", tabindex: "-1" });
   const findInput = h("input", { class: "find-input", type: "text", placeholder: "Find in file", spellcheck: "false", autocomplete: "off", "aria-label": "Find in file" });
@@ -50,7 +59,22 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
     findBtn("find-next", "Next match (Enter)", icon.down),
     findBtn("find-close", "Close (Esc)", icon.close),
   );
-  const el = h("section", { class: "pane" }, header, findBar, scroller);
+  // The change map: where additions and removals sit in the file, beside the scrollbar.
+  const mapMarks = h("div", { class: "map-marks" });
+  const mapView = h("div", { class: "map-view" });
+  const map = h("div", { class: "map", hidden: true, "aria-hidden": "true" }, mapMarks, mapView);
+  // Actions for the selected lines.
+  const selLabel = h("span", { class: "selbar-l" });
+  const selBar = h(
+    "div",
+    { class: "selbar", hidden: true, role: "toolbar", "aria-label": "Selected lines" },
+    selLabel,
+    h("button", { class: "selbar-b primary", "data-act": "ref", "data-tip": "Copy a file and line reference to paste into Claude Code", "data-kbd": "C" }, "Copy reference"),
+    h("button", { class: "selbar-b", "data-act": "code" }, "Copy code"),
+    h("button", { class: "selbar-b", "data-act": "open" }, "Open in editor"),
+    h("button", { class: "tgl", "data-act": "clear", "aria-label": "Clear selection", "data-tip": "Clear selection", "data-kbd": "Esc", html: icon.close }),
+  );
+  const el = h("section", { class: "pane" }, header, findBar, h("div", { class: "pane-body" }, scroller, map), selBar);
 
   // ---- find in file: searches the rows on screen's model (hidden unchanged regions are not searched) ----
   let hits: { c: number; r: number }[] = [];
@@ -124,6 +148,189 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
     actions.openInEditor(current.path, n ? Number(n) : null);
   });
 
+  // ---- line selection: click a line number, Shift-click to extend ----
+  let sel: { a: Pos; b: Pos } | null = null;
+  const chunkOf = new WeakMap<Element, Chunk>();
+  const before = (x: Pos, y: Pos) => x[0] < y[0] || (x[0] === y[0] && x[1] <= y[1]);
+  const selRange = (): [Pos, Pos] | null => (sel ? (before(sel.a, sel.b) ? [sel.a, sel.b] : [sel.b, sel.a]) : null);
+  function paintSel(c: Chunk, ci: number) {
+    const r = selRange();
+    if (!r || !c.filled || ci < r[0][0] || ci > r[1][0]) return;
+    const from = ci === r[0][0] ? r[0][1] : 0;
+    const to = ci === r[1][0] ? r[1][1] : c.rows.length - 1;
+    for (let i = from; i <= to; i++) c.el.children[i]?.classList.add("sel");
+  }
+  function selInfo() {
+    const r = selRange();
+    if (!r || !current) return null;
+    let lo = Infinity;
+    let hi = -Infinity;
+    let oLo = Infinity;
+    let oHi = -Infinity;
+    const text: string[] = [];
+    for (let ci = r[0][0]; ci <= r[1][0]; ci++) {
+      const c = chunks[ci];
+      if (!c) break;
+      const from = ci === r[0][0] ? r[0][1] : 0;
+      const to = ci === r[1][0] ? r[1][1] : c.rows.length - 1;
+      for (let i = from; i <= to; i++) {
+        const row = c.rows[i];
+        if (!row) continue;
+        const n = row.b?.n ?? row.a?.n;
+        const o = row.a?.o ?? row.b?.o;
+        if (n !== undefined) (lo = Math.min(lo, n)), (hi = Math.max(hi, n));
+        else if (o !== undefined) (oLo = Math.min(oLo, o)), (oHi = Math.max(oHi, o));
+        text.push((row.b ?? row.a!).t);
+      }
+    }
+    const removed = lo === Infinity;
+    if (removed) (lo = oLo), (hi = oHi);
+    if (lo === Infinity) return null;
+    return { lo, hi, removed, text: text.join("\n"), ref: `@${current.path}#L${lo}${hi > lo ? `-${hi}` : ""}` };
+  }
+  function renderSel() {
+    scroller.querySelectorAll(".sel").forEach((n) => n.classList.remove("sel"));
+    chunks.forEach(paintSel);
+    const info = selInfo();
+    selBar.hidden = !info;
+    if (info) selLabel.textContent = `${info.removed ? "Removed line" : "Line"}${info.hi > info.lo ? `s ${fmt.format(info.lo)} to ${fmt.format(info.hi)}` : ` ${fmt.format(info.lo)}`}`;
+  }
+  function clearSel() {
+    if (!sel) return false;
+    sel = null;
+    renderSel();
+    return true;
+  }
+  scroller.addEventListener("click", (e) => {
+    const no = (e.target as HTMLElement).closest(".no");
+    const row = no?.closest(".ln, .sr");
+    const c = row?.parentElement && chunkOf.get(row.parentElement);
+    if (!row || !c) return;
+    const pos: Pos = [chunks.indexOf(c), Array.prototype.indexOf.call(c.el.children, row)];
+    if (e.shiftKey && sel) sel.b = pos;
+    else if (sel && sel.a[0] === pos[0] && sel.a[1] === pos[1] && sel.b[0] === pos[0] && sel.b[1] === pos[1]) sel = null;
+    else sel = { a: pos, b: pos };
+    renderSel();
+  });
+  async function copy(text: string, what: string) {
+    actions.notify((await copyText(text)) ? `Copied ${what}` : "Couldn't reach the clipboard");
+  }
+  /** Copy a reference to the selected lines, or the file's path with nothing selected. */
+  function copyRef(full = false) {
+    if (!current) return;
+    const info = selInfo();
+    if (info) copy(info.ref, info.ref);
+    else {
+      const p = full ? `${state.root.replace(/[\\/]+$/, "")}/${current.path}` : current.path;
+      copy(p, p);
+    }
+  }
+  selBar.addEventListener("click", (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLElement>("[data-act]")?.dataset.act;
+    const info = selInfo();
+    if (!act || !current) return;
+    if (act === "clear") clearSel();
+    else if (!info) return;
+    else if (act === "ref") copy(info.ref, info.ref);
+    else if (act === "code") copy(info.text, info.hi > info.lo ? `${fmt.format(info.text.split("\n").length)} lines` : "1 line");
+    else if (act === "open") actions.openInEditor(current.path, info.lo);
+  });
+
+  // ---- change map and stepping between changes ----
+  /** The first row of every run of changed lines, in document order. */
+  let blocks: { c: Chunk; r: number }[] = [];
+  let lastJump = { i: -1, top: -1 };
+  function buildMap() {
+    blocks = [];
+    lastJump = { i: -1, top: -1 };
+    const body = scroller.querySelector(".diff:not(.plain)");
+    if (!body) {
+      map.hidden = true;
+      return;
+    }
+    // Rows count one unit each, as does every separator between them.
+    const kinds: number[] = []; // per unit: bit 1 = addition, bit 2 = removal
+    let run = false;
+    for (const child of Array.from(body.children)) {
+      const c = chunkOf.get(child);
+      if (!c || c.hunk < 0) {
+        run = false;
+        for (let i = c ? c.rows.length : 1; i > 0; i--) kinds.push(0);
+        continue;
+      }
+      c.rows.forEach((row, r) => {
+        const k = (row.a?.k === "-" ? 2 : 0) | ((row.b ?? row.a)?.k === "+" ? 1 : 0);
+        if (k && !run) blocks.push({ c, r });
+        run = k > 0;
+        kinds.push(k);
+      });
+    }
+    const total = kinds.length;
+    const n = Math.min(total, MAP_BUCKETS);
+    const buckets = new Uint8Array(n);
+    kinds.forEach((k, u) => k && (buckets[Math.floor((u / total) * n)] |= k));
+    let html = "";
+    for (let i = 0; i < n; ) {
+      const k = buckets[i];
+      let j = i + 1;
+      while (j < n && buckets[j] === k) j++;
+      if (k) html += `<i class="m${k}" style="top:${((i / n) * 100).toFixed(2)}%;height:${(((j - i) / n) * 100).toFixed(2)}%"></i>`;
+      i = j;
+    }
+    mapMarks.innerHTML = html;
+    syncMap();
+  }
+  function syncMap() {
+    const sh = scroller.scrollHeight;
+    const ch = scroller.clientHeight;
+    map.hidden = !blocks.length || sh <= ch + 4;
+    if (map.hidden) return;
+    mapView.style.top = `${(scroller.scrollTop / sh) * 100}%`;
+    mapView.style.height = `${(ch / sh) * 100}%`;
+  }
+  scroller.addEventListener("scroll", syncMap, { passive: true });
+  new ResizeObserver(syncMap).observe(scroller);
+  map.addEventListener("pointerdown", (e) => {
+    map.setPointerCapture(e.pointerId);
+    const go = (ev: PointerEvent) => {
+      const r = map.getBoundingClientRect();
+      scroller.scrollTop = ((ev.clientY - r.top) / r.height) * scroller.scrollHeight - scroller.clientHeight / 2;
+    };
+    go(e);
+    map.addEventListener("pointermove", go);
+    map.addEventListener("pointerup", () => map.removeEventListener("pointermove", go), { once: true });
+  });
+  const blockY = (b: { c: Chunk; r: number }) =>
+    b.c.filled ? ((b.c.el.children[b.r] as HTMLElement | undefined)?.offsetTop ?? b.c.el.offsetTop) : b.c.el.offsetTop + b.r * rowH();
+  /** Scroll to the next or previous run of changed lines. False when there is none that way. */
+  function stepChange(d: 1 | -1): boolean {
+    if (!blocks.length) return false;
+    const lead = scroller.clientHeight * 0.25;
+    let i: number;
+    if (lastJump.i >= 0 && Math.abs(scroller.scrollTop - lastJump.top) < 2) i = lastJump.i + d;
+    else {
+      const line = scroller.scrollTop + lead;
+      const ys = blocks.map(blockY);
+      i = ys.findIndex((y) => y > line + 2);
+      if (d < 0) for (i = ys.length - 1; i >= 0 && ys[i] >= line - 2; ) i--;
+    }
+    const b = blocks[i];
+    if (!b) return false;
+    fill(b.c);
+    const row = b.c.el.children[b.r] as HTMLElement | undefined;
+    if (!row) return false;
+    scroller.scrollTop = row.offsetTop - lead;
+    fillVisible();
+    lastJump = { i, top: scroller.scrollTop };
+    row.classList.remove("jumped");
+    void row.offsetWidth;
+    row.classList.add("jumped");
+    return true;
+  }
+  async function expandAll() {
+    for (const gap of Array.from(scroller.querySelectorAll<HTMLElement>(".gap"))) await expandGap(gap);
+  }
+
   let gen = 0;
   /** `plain`: an unchanged file opened from the "All files" tree, shown as its contents. */
   let current: { path: string; commit: string | null; diff: FileDiff | null; mode: "diff" | "preview"; plain: boolean } | null = null;
@@ -153,6 +360,9 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
       actions.openInEditor(current.path, null);
       return;
     }
+    if (t.closest(".copy-tgl")) return copyRef((e as MouseEvent).shiftKey);
+    const nav = t.closest<HTMLElement>("[data-step]");
+    if (nav) return void stepChange(nav.dataset.step === "1" ? 1 : -1);
     if (t.closest(".viewed-box")) {
       e.preventDefault();
       actions.toggleViewed(current.path);
@@ -218,6 +428,12 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
       `<span class="fh-tags">${tags}</span>` +
       `<span class="fh-counts">${counts}</span>` +
       `<span class="fh-tools">` +
+      (current!.mode === "diff" && blocks.length
+        ? `<span class="fh-nav" role="group" aria-label="${fmt.format(blocks.length)} ${blocks.length === 1 ? "change" : "changes"}">` +
+          `<button class="tgl" data-step="-1" aria-label="Previous change" data-tip="Previous change" data-kbd="P">${icon.up}</button>` +
+          `<span class="fh-nav-n" data-tip="Changed blocks in this file">${fmt.format(blocks.length)}</span>` +
+          `<button class="tgl" data-step="1" aria-label="Next change" data-tip="Next change" data-kbd="N">${icon.down}</button></span>`
+        : "") +
       OPEN_BTN +
       (md
         ? `<span class="seg" role="group" aria-label="View mode"><button data-mode="diff" aria-pressed="${!state.prefs.mdPreview}" data-tip="Show diff">${icon.code}<span>Diff</span></button><button data-mode="preview" aria-pressed="${state.prefs.mdPreview}" data-tip="Show rendered Markdown">${icon.preview}<span>Preview</span></button></span>`
@@ -312,6 +528,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
     if (my !== gen) return;
     current.diff = diff;
     renderDiff(f, diff);
+    renderHeader();
     if (anchor) restoreAnchor(anchor);
     else if (!refresh || !same) scroller.scrollTop = 0;
 
@@ -320,6 +537,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
       if (lang && my === gen) {
         const a = captureAnchor();
         renderDiff(f, diff);
+        renderHeader();
         if (a) restoreAnchor(a);
       }
     }
@@ -327,6 +545,10 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
 
   function resetBody() {
     chunks = [];
+    sel = null;
+    selBar.hidden = true;
+    blocks = [];
+    map.hidden = true;
     hits = [];
     hitEl = null;
     if (!findBar.hidden) queueMicrotask(() => runFind(false));
@@ -428,6 +650,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
     scroller.append(body);
     if (eager) chunks.forEach(fill);
     else fillVisible();
+    buildMap();
   }
 
   /** An unchanged file: its lines with new-side numbers, no diff markers. */
@@ -452,6 +675,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
   function addChunk(rows: Row[], segs: (Seg[] | null)[] | null, hunk: number): Chunk {
     const c: Chunk = { el: h("div", { class: "chunk" }), rows, segs, hunk, filled: false };
     c.el.style.height = `${rows.length * rowH()}px`;
+    chunkOf.set(c.el, c);
     chunks.push(c);
     return c;
   }
@@ -494,7 +718,9 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
     gap.replaceWith(frag);
     // Keep chunks in document order; fillVisible and anchoring rely on it.
     chunks.sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+    clearSel(); // positions shifted
     fillVisible();
+    buildMap();
   }
 
   function fill(c: Chunk) {
@@ -516,6 +742,7 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
     });
     c.el.innerHTML = html;
     c.el.style.height = "";
+    if (sel) paintSel(c, chunks.indexOf(c));
   }
 
   /** Each side of a hunk is highlighted as one block, so multi-line constructs stay correct. */
@@ -586,6 +813,10 @@ export function diffView(actions: { toggleViewed: (path: string) => void; openIn
       scroller.scrollBy({ top: dy });
     },
     openFind,
+    stepChange,
+    expandAll,
+    copyRef,
+    clearSelection: clearSel,
     /** Re-render the open file in place (after a display setting changes). */
     refresh() {
       if (current) show(current.path, true);

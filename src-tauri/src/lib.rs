@@ -228,6 +228,13 @@ fn set_viewed(state: State<AppState>, path: String, hash: Option<String>) -> Cmd
 }
 
 #[tauri::command]
+fn set_viewed_many(state: State<AppState>, marks: std::collections::HashMap<String, Option<String>>) -> CmdResult<()> {
+    let root = root_of(&state)?;
+    state.store.set_viewed_many(&root.to_string_lossy(), marks);
+    Ok(())
+}
+
+#[tauri::command]
 fn recent_repos(state: State<AppState>) -> Vec<Recent> {
     state.store.recents()
 }
@@ -281,6 +288,7 @@ pub fn run() {
             get_lines,
             get_file_text,
             set_viewed,
+            set_viewed_many,
             recent_repos,
             forget_recent,
             launch_path,

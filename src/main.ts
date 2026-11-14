@@ -2,17 +2,17 @@ import "@fontsource-variable/geist";
 import "@fontsource-variable/jetbrains-mono";
 import "./styles/tokens.css";
 import "./styles/app.css";
-import "./theme";
+import { applyDisplay, toggleLightDark } from "./theme";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, events, type Change, type FileEntry, type Snapshot } from "./api";
-import { h } from "./dom";
-import { afterRender, changed, savePrefs, state, subscribe, treeMode, viewState, visibleFiles, type Mode } from "./state";
+import { h, modKey } from "./dom";
+import { afterRender, changed, savePrefs, state, subscribe, treeMode, viewState, visibleFiles, type Mode, type Prefs } from "./state";
 import { stepCommit } from "./ui/history";
 import { invalidate, resetTree, reveal } from "./ui/tree";
 import { diffView } from "./ui/diffview";
-import { palette } from "./ui/palette";
+import { palette, type Command } from "./ui/palette";
 import { settings } from "./ui/settings";
 import { sidebar, step } from "./ui/sidebar";
 import { tickLive, titlebar } from "./ui/titlebar";
@@ -52,6 +52,45 @@ function toggleViewed(path: string) {
     }
   }
   changed();
+}
+
+/** Mark every changed file viewed, or clear every mark. */
+function markAll(viewed: boolean) {
+  if (state.mode !== "changes" || !state.work.size) return;
+  const marks: Record<string, string | null> = {};
+  for (const f of state.work.values()) marks[f.path] = viewed ? f.diffHash : null;
+  for (const p of Object.keys(state.viewed)) if (!(p in marks)) marks[p] = viewed ? state.viewed[p] : null;
+  state.viewed = viewed ? (marks as Record<string, string>) : {};
+  api.setViewedMany(marks);
+  changed();
+  toast(viewed ? `Marked ${state.work.size} ${state.work.size === 1 ? "file" : "files"} viewed` : "Cleared viewed marks");
+}
+
+/** Select the next file that isn't marked viewed, wrapping around. */
+function nextUnviewed() {
+  const list = visibleFiles();
+  const i = list.findIndex((f) => f.path === state.selected);
+  const next = list.slice(i + 1).concat(list.slice(0, Math.max(i, 0))).find((f) => viewState(f) !== "viewed");
+  if (next) select(next.path);
+  else toast(list.length ? "Every file is viewed" : "No changed files");
+}
+
+function togglePref(key: keyof Prefs) {
+  (state.prefs[key] as boolean) = !state.prefs[key];
+  savePrefs();
+  changed();
+  document.dispatchEvent(new CustomEvent("morphe:pref", { detail: key }));
+  if (key === "split" || key === "wrap") dv.refresh();
+}
+
+const SIZES: Prefs["codeSize"][] = ["s", "m", "l", "xl"];
+function zoom(d: 1 | -1 | 0) {
+  const i = d === 0 ? 1 : Math.min(SIZES.length - 1, Math.max(0, SIZES.indexOf(state.prefs.codeSize) + d));
+  if (SIZES[i] === state.prefs.codeSize) return;
+  state.prefs.codeSize = SIZES[i];
+  savePrefs();
+  applyDisplay();
+  dv.refresh();
 }
 
 async function openRepo(path: string) {
@@ -291,7 +330,7 @@ function toast(msg: string) {
   toastEl.textContent = msg;
   toastEl.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => (toastEl.hidden = true), 5000);
+  toastTimer = window.setTimeout(() => (toastEl.hidden = true), 3200);
 }
 
 function mostRecent(files: FileEntry[]): FileEntry | undefined {
@@ -302,13 +341,51 @@ function mostRecent(files: FileEntry[]): FileEntry | undefined {
 
 const app = document.getElementById("app")!;
 const sb = sidebar({ select, toggleViewed, setMode, setBase, ...historyActions });
-const dv = diffView({ toggleViewed, openInEditor });
+const dv = diffView({ toggleViewed, openInEditor, notify: toast });
 const divider = h("div", { class: "divider", role: "separator", "aria-orientation": "vertical", "aria-label": "Resize sidebar", tabindex: "0" });
 const workspace = h("main", { class: "workspace" }, sb.el, divider, dv.el);
 const wl = welcome(openRepo, pickFolder);
 const gone = goneState(pickFolder, () => openRepo(state.root));
-const pal = palette((p) => select(p));
 const prefsSheet = settings({ refreshDiff: () => dv.refresh() });
+
+/** Everything the command palette offers right now. */
+function commands(): Command[] {
+  const repo = state.screen === "repo";
+  const work = repo && state.mode === "changes";
+  const file = repo && !!dv.path;
+  const p = state.prefs;
+  const onOff = (on: boolean, what: string) => `${on ? "Turn off" : "Turn on"} ${what}`;
+  const list: (Command | false)[] = [
+    file && { label: "Next change", kbd: "N", run: () => dv.stepChange(1) },
+    file && { label: "Previous change", kbd: "P", run: () => dv.stepChange(-1) },
+    file && { label: "Show all unchanged lines", kbd: "E", run: () => dv.expandAll() },
+    file && { label: "Find in file", kbd: `${modKey}+F`, run: () => dv.openFind() },
+    file && { label: "Copy file path", kbd: "C", run: () => dv.copyRef() },
+    file && { label: "Copy full file path", run: () => dv.copyRef(true) },
+    file && { label: "Open file in editor", kbd: "O", run: () => openInEditor(dv.path!, null) },
+    work && { label: "Next file not viewed", kbd: "U", run: nextUnviewed },
+    work && { label: "Mark all files viewed", run: () => markAll(true) },
+    work && { label: "Clear all viewed marks", run: () => markAll(false) },
+    repo && { label: p.split ? "Show diffs unified" : "Show diffs side by side", kbd: "S", run: () => togglePref("split") },
+    repo && { label: onOff(p.wrap, "line wrapping"), kbd: "W", run: () => togglePref("wrap") },
+    repo && { label: onOff(p.ignoreWs, "ignore whitespace"), run: () => togglePref("ignoreWs") },
+    repo && { label: onOff(p.allFiles, "all files tree"), run: () => togglePref("allFiles") },
+    work && { label: onOff(p.follow, "follow latest edit"), run: () => togglePref("follow") },
+    work && { label: onOff(p.hideViewed, "hide viewed files"), run: () => togglePref("hideViewed") },
+    repo && { label: onOff(p.group, "group by folder"), run: () => togglePref("group") },
+    repo && { label: state.mode === "changes" ? "Go to History" : "Go to Changes", run: () => setMode(state.mode === "changes" ? "history" : "changes") },
+    repo && { label: "Filter files", kbd: "/", run: () => sb.focusFilter() },
+    { label: "Larger diff text", kbd: `${modKey}+=`, run: () => zoom(1) },
+    { label: "Smaller diff text", kbd: `${modKey}+-`, run: () => zoom(-1) },
+    { label: "Switch between light and dark", run: () => (toggleLightDark(), changed()) },
+    { label: "Open settings", kbd: `${modKey}+,`, run: () => prefsSheet.open() },
+    { label: "Show keyboard shortcuts", kbd: "?", run: () => prefsSheet.open("keys") },
+    { label: "Open a folder", run: pickFolder },
+    repo && { label: "Switch repository", run: goWelcome },
+  ];
+  return list.filter((c): c is Command => !!c);
+}
+const pal = palette((p) => select(p), commands);
 // The branch chip: jump to History's commit list with the branch picker open.
 function showBranches() {
   setMode("history");
@@ -372,12 +449,21 @@ document.addEventListener("keydown", (e) => {
   }
   if ((e.ctrlKey || e.metaKey) && k === "p") {
     e.preventDefault();
-    if (state.screen === "repo") pal.open();
+    if (e.shiftKey) pal.open("commands");
+    else if (state.screen === "repo") pal.open();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && (e.key === "=" || e.key === "+" || e.key === "-" || e.key === "0")) {
+    e.preventDefault();
+    zoom(e.key === "-" ? -1 : e.key === "0" ? 0 : 1);
     return;
   }
   const t = e.target as HTMLElement;
   if (e.ctrlKey || e.metaKey || e.altKey || t.matches("input, textarea") || state.screen !== "repo") return;
-  if (e.key === "Escape" && state.mode === "history" && state.history.detail) {
+  if (e.key === "?") prefsSheet.open("keys");
+  else if (e.key === "Escape" && dv.clearSelection()) {
+    /* the line selection is gone; nothing else to close */
+  } else if (e.key === "Escape" && state.mode === "history" && state.history.detail) {
     state.history.detail = false;
     changed();
     setTimeout(() => sb.focusCommits());
@@ -385,6 +471,14 @@ document.addEventListener("keydown", (e) => {
   else if (k === "j") step(1, select);
   else if (k === "k") step(-1, select);
   else if (k === "v" && state.selected) toggleViewed(state.selected);
+  else if (k === "n") dv.stepChange(1);
+  else if (k === "p") dv.stepChange(-1);
+  else if (k === "u" && state.mode === "changes") nextUnviewed();
+  else if (k === "c") dv.copyRef(e.shiftKey);
+  else if (k === "o" && dv.path) openInEditor(dv.path, null);
+  else if (k === "s") togglePref("split");
+  else if (k === "w") togglePref("wrap");
+  else if (k === "e") dv.expandAll();
   else if (e.key === "/") {
     e.preventDefault();
     sb.focusFilter();

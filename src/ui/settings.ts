@@ -84,9 +84,18 @@ const SEG: Partial<Record<keyof Prefs, { opts: Opt[]; display?: boolean; diff?: 
 const KEYS: [string, string][] = [
   ["J / K", "Next / previous file"],
   ["Shift+J / Shift+K", "Next / previous commit, in History"],
+  ["N / P", "Next / previous change in the open file"],
   ["V", "Mark the selected file viewed"],
+  ["U", "Next file you haven't viewed"],
+  ["C", "Copy the file path, or a reference to the selected lines"],
+  ["O", "Open the file in your editor"],
+  ["S / W", "Side by side / wrap long lines"],
+  ["E", "Show all unchanged lines"],
   ["/", "Filter files (Esc clears)"],
   [`${modKey}+P`, "Jump to a file"],
+  [`${modKey}+Shift+P`, "Run a command"],
+  [`${modKey}+= / ${modKey}+-`, "Larger / smaller diff text"],
+  ["?", "This list"],
   [`${modKey}+F`, "Find in the open file (Enter / Shift+Enter for next / previous)"],
   [`${modKey}+,`, "Settings"],
   ["Esc", "Close a menu or this sheet"],
@@ -239,7 +248,8 @@ export function settings(hooks: { refreshDiff: () => void }) {
     body.innerHTML = `<h3 class="set-h">${title}</h3>${content}`;
   }
 
-  function open() {
+  function open(to?: Section) {
+    if (to) section = to;
     restoreFocus = document.activeElement;
     render();
     scrim.hidden = false;
