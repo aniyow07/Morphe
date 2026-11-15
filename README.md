@@ -61,7 +61,7 @@
 Build the installer (see [Building](#building)), then run:
 
 ```
-src-tauri\target\release\bundle\nsis\Morphe_0.1.0_x64-setup.exe
+src-tauri\target\release\bundle\nsis\Morphe_0.2.0_x64-setup.exe
 ```
 
 The same folder has an `.msi` too. On macOS and Linux, `npm run tauri build` produces a `.dmg` or `.app`, or a `.deb` or `.AppImage`.
