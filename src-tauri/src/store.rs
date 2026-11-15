@@ -59,6 +59,18 @@ impl Store {
         write_json(&self.viewed_file(root), &map);
     }
 
+    /// Set or clear many marks with a single write.
+    pub fn set_viewed_many(&self, root: &str, marks: HashMap<String, Option<String>>) {
+        let mut map = self.viewed(root);
+        for (path, hash) in marks {
+            match hash {
+                Some(h) => map.insert(path, h),
+                None => map.remove(&path),
+            };
+        }
+        write_json(&self.viewed_file(root), &map);
+    }
+
     /// Drop marks for files that no longer differ from HEAD.
     pub fn prune_viewed(&self, root: &str, live: &[&str]) -> HashMap<String, String> {
         let mut map = self.viewed(root);

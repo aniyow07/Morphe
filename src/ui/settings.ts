@@ -84,9 +84,18 @@ const SEG: Partial<Record<keyof Prefs, { opts: Opt[]; display?: boolean; diff?: 
 const KEYS: [string, string][] = [
   ["J / K", "Next / previous file"],
   ["Shift+J / Shift+K", "Next / previous commit, in History"],
+  ["N / P", "Next / previous change in the open file"],
   ["V", "Mark the selected file viewed"],
+  ["U", "Next file you haven't viewed"],
+  ["C", "Copy the file path, or a reference to the selected lines"],
+  ["O", "Open the file in your editor"],
+  ["S / W", "Side by side / wrap long lines"],
+  ["E", "Show all unchanged lines"],
   ["/", "Filter files (Esc clears)"],
   [`${modKey}+P`, "Jump to a file"],
+  [`${modKey}+Shift+P`, "Run a command"],
+  [`${modKey}+= / ${modKey}+-`, "Larger / smaller diff text"],
+  ["?", "This list"],
   [`${modKey}+F`, "Find in the open file (Enter / Shift+Enter for next / previous)"],
   [`${modKey}+,`, "Settings"],
   ["Esc", "Close a menu or this sheet"],
@@ -217,7 +226,7 @@ export function settings(hooks: { refreshDiff: () => void }) {
 
   function general() {
     return (
-      row("Open files in", "Used by the open button above each file, and by double-clicking a line.", seg("editor", "Open files in")) +
+      row("Open files in", "Used by the open button above each file, and by double-clicking a line. VS Code, Cursor and Zed open the whole repository, then the file.", seg("editor", "Open files in")) +
       row("Reopen last repository", "On launch, open the most recent repository instead of the start screen.", seg("reopenLast", "Reopen last repository")) +
       row("Follow latest edit", "Jump to each file as it changes. Same as the toggle above the file list.", seg("follow", "Follow latest edit"))
     );
@@ -239,7 +248,9 @@ export function settings(hooks: { refreshDiff: () => void }) {
     body.innerHTML = `<h3 class="set-h">${title}</h3>${content}`;
   }
 
-  function open() {
+  function open(to?: Section | Event) {
+    // Also used directly as a click handler, which passes the event.
+    if (typeof to === "string") section = to;
     restoreFocus = document.activeElement;
     render();
     scrim.hidden = false;

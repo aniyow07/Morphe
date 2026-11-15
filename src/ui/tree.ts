@@ -1,5 +1,6 @@
 // "All files": the working tree as a lazily loaded folder tree, changed files marked in their
 // status color. Folders load one level at a time, so a huge repository costs only what's open.
+import { fileIcon } from "../fileicons";
 import { api, type DirEntry, type FileEntry } from "../api";
 import { esc, fmt, h, icon, STATUS_LABEL } from "../dom";
 import { changed, shownCommit, state } from "../state";
@@ -159,6 +160,7 @@ export function treeRows(): HTMLElement[] {
           cls: `row trow tfile${f ? ` changed c-${f.status}` : ""}`,
           html:
             (f ? `<span class="st st-${f.status}" data-tip="${STATUS_LABEL[f.status]}">${f.status}</span>` : `<span class="st"></span>`) +
+            fileIcon(name) +
             `<span class="tn">${esc(name)}</span>` +
             (f
               ? `<span class="ct">${

@@ -30,12 +30,20 @@
 - Collapsed "N unchanged lines" sections, each labelled with the function or heading it sits in.
 - A rendered preview for Markdown files.
 - Find in the open file, an ignore-whitespace setting, and a line-wrap toggle.
-- Open any file in VS Code, Cursor or Zed, or double-click a line to jump straight to it.
+- Open any file in VS Code, Cursor or Zed, or double-click a line to jump straight to it. The editor opens the whole repository, then the file at that line.
+- In side-by-side view, drag the middle line to give one side more room (double-click resets it).
+- A change map beside the scrollbar shows where the additions and removals sit in the file. Click it to jump, or step through changes with `N` and `P`.
+- Click a line number (Shift-click for a range) to copy a `@path#L10-20` reference for Claude Code, copy the code, or open that line in your editor.
 
 **Keep track of what you've reviewed**
 
 - Tick files as **Viewed**. A tick resets when the file changes again, and **Hide viewed** clears the list down to what's left.
-- Each file shows its status (M, A, D, U, R, T), `+`/`−` counts and a staged badge.
+- Each file shows its status (M, A, D, U, R, T), a file type icon, `+`/`−` counts and a staged badge.
+- A progress ring in the title bar counts what's left. `U` moves to the next file you haven't viewed, and the command palette can mark everything viewed or clear the marks.
+
+**Do anything from the keyboard**
+
+- `Ctrl+Shift+P` opens a command palette with every action; `Ctrl+P` jumps to a file.
 
 **Look back through history**
 
@@ -66,7 +74,16 @@ Open a repository from the start screen, or pass a path: `morphe C:\path\to\repo
 |---|---|
 | `J` / `K` | Next / previous file |
 | `Shift+J` / `Shift+K` | Next / previous commit, in History |
+| `N` / `P` | Next / previous change in the open file |
 | `V` | Mark the selected file viewed |
+| `U` | Next file you haven't viewed |
+| `C` | Copy the file path, or a reference to the selected lines |
+| `O` | Open the file in your editor |
+| `S` / `W` | Side by side / wrap long lines |
+| `E` | Show all unchanged lines |
+| `Ctrl+Shift+P` | Run a command |
+| `Ctrl+=` / `Ctrl+-` | Larger / smaller diff text |
+| `?` | Keyboard shortcuts |
 | `/` | Filter files (`Esc` clears) |
 | `Ctrl+P` / `⌘P` | Jump to a file |
 | `Ctrl+F` / `⌘F` | Find in the open file (`Enter` / `Shift+Enter` for next / previous) |

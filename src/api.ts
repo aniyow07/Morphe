@@ -100,6 +100,8 @@ export const api = {
   getLines: (path: string, start: number, end: number) => invoke<string[]>("get_lines", { path, start, end }),
   getFileText: (path: string) => invoke<string | null>("get_file_text", { path }),
   setViewed: (path: string, hash: string | null) => invoke<void>("set_viewed", { path, hash }),
+  /** Set or clear (null) many viewed marks in one write. */
+  setViewedMany: (marks: Record<string, string | null>) => invoke<void>("set_viewed_many", { marks }),
   recentRepos: () => invoke<Recent[]>("recent_repos"),
   forgetRecent: (path: string) => invoke<void>("forget_recent", { path }),
   launchPath: () => invoke<string | null>("launch_path"),

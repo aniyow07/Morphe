@@ -2202,3 +2202,338 @@ kbd {
 .toast[hidden] {
   display: none;
 }
+
+/* ---------- frame: the chrome wraps one raised sheet, the diff ---------- */
+
+.titlebar {
+  border-bottom-color: transparent;
+}
+.workspace {
+  background: var(--bg-sidebar);
+}
+.divider {
+  background: transparent;
+}
+.pane {
+  border: solid var(--border);
+  border-width: 1px 0 0 1px;
+  border-top-left-radius: var(--r-float);
+  overflow: hidden;
+}
+.pane-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.pane-body .diff-scroll {
+  min-width: 0;
+}
+
+/* ---------- file rows: status chip, change meter ---------- */
+
+.row .st,
+.pal-opt .st,
+.fh .st {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  align-self: center;
+  border-radius: 5px;
+  background: color-mix(in srgb, currentColor 15%, transparent);
+}
+.fh .st:empty {
+  display: none;
+}
+.row[aria-selected="true"] {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.ct {
+  position: relative;
+}
+.cm {
+  position: absolute;
+  right: 0;
+  bottom: -3px;
+  width: calc(36px * var(--w));
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, var(--add-sign) var(--a), var(--del-sign) 0);
+  opacity: 0.75;
+}
+.row.is-viewed .cm {
+  opacity: 0.4;
+}
+
+/* ---------- title bar: review progress ---------- */
+
+.viewed-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-6);
+}
+.ring circle {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 2;
+}
+.ring .ring-v {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+.viewed-count.done .ring-v {
+  stroke: var(--add-sign);
+}
+
+/* ---------- diff: change edges, clickable line numbers, selection ---------- */
+
+.ln.a .no:first-child,
+.sr .no.a {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--add-sign) 75%, transparent);
+}
+.ln.d .no:first-child,
+.sr .no.d {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--del-sign) 75%, transparent);
+}
+.ln .no,
+.sr .no {
+  cursor: pointer;
+}
+.ln .no:hover,
+.sr .no:hover {
+  color: var(--text);
+}
+.ln.sel > *,
+.sr.sel > * {
+  background-image: linear-gradient(var(--accent-soft), var(--accent-soft));
+}
+.ln.sel .no,
+.sr.sel .no {
+  color: var(--accent-text);
+}
+.ln.sel .no:first-child,
+.sr.sel .no:first-child {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.ln.jumped,
+.sr.jumped {
+  animation: wash 1100ms var(--ease-out);
+}
+
+.selbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--s-24);
+  width: max-content;
+  max-width: calc(100% - var(--s-32));
+  margin-inline: auto;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-4) var(--s-4) var(--s-4) var(--s-12);
+  background: var(--surface);
+  border-radius: var(--r-float);
+  box-shadow: var(--shadow-float);
+  font-size: var(--fs-12);
+  white-space: nowrap;
+  animation: rise var(--t-med) var(--ease-out);
+}
+.selbar-l {
+  margin-right: var(--s-8);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.selbar-b {
+  height: 26px;
+  padding: 0 var(--s-8);
+  border-radius: var(--r-control);
+  font-weight: 500;
+  transition: background var(--t-fast) var(--ease-out);
+}
+.selbar-b:hover {
+  background: var(--surface-hover);
+}
+.selbar-b.primary {
+  background: var(--accent);
+  color: var(--bg);
+}
+.selbar-b.primary:hover {
+  background: color-mix(in srgb, var(--accent) 88%, var(--text));
+}
+.toast {
+  bottom: 72px;
+}
+
+/* ---------- change map: additions and removals along the file ---------- */
+
+.map {
+  flex: none;
+  width: 14px;
+  position: relative;
+  border-left: 1px solid var(--border);
+  cursor: pointer;
+  touch-action: none;
+}
+.map-marks i {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  min-height: 2px;
+  border-radius: 1px;
+}
+.map-marks .m1 {
+  background: var(--add-sign);
+}
+.map-marks .m2 {
+  background: var(--del-sign);
+}
+.map-marks .m3 {
+  background: linear-gradient(90deg, var(--del-sign) 50%, var(--add-sign) 50%);
+}
+.map-view {
+  position: absolute;
+  left: 0;
+  right: 0;
+  min-height: 8px;
+  background: color-mix(in srgb, var(--text-faint) 16%, transparent);
+  border-block: 1px solid color-mix(in srgb, var(--text-faint) 40%, transparent);
+  pointer-events: none;
+}
+.map:hover .map-view {
+  background: color-mix(in srgb, var(--text-faint) 26%, transparent);
+}
+
+.fh-nav {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+}
+.fh-nav .tgl {
+  width: 24px;
+  height: 24px;
+}
+.fh-nav-n {
+  min-width: 18px;
+  text-align: center;
+  font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* ---------- palette: files and commands ---------- */
+
+.pal-field {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  padding: 0 var(--s-16);
+  border-bottom: 1px solid var(--border);
+}
+.pal-icon {
+  display: flex;
+  color: var(--text-faint);
+}
+.pal-field .pal-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border-bottom: 0;
+}
+.pal-cmd {
+  align-items: center;
+  justify-content: space-between;
+}
+.pal-kbd {
+  display: flex;
+  gap: 3px;
+}
+.pal-foot {
+  display: flex;
+  gap: var(--s-16);
+  padding: var(--s-8) var(--s-16);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-11);
+  color: var(--text-faint);
+}
+.pal-foot span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-4);
+}
+.pal-foot-r {
+  margin-left: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ln.jumped,
+  .sr.jumped,
+  .selbar {
+    animation: none;
+  }
+}
+
+/* ---------- file type icons ---------- */
+
+.fi {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  align-self: center;
+  /* pull every brand color toward the text color so dark marks stay readable on dark themes */
+  fill: color-mix(in srgb, currentColor 68%, var(--text));
+}
+.fi-mono {
+  fill: var(--text-muted);
+}
+.fi-plain {
+  fill: none;
+  color: var(--text-faint);
+}
+.row.is-viewed .fi {
+  opacity: 0.55;
+}
+.fh .fi {
+  width: 16px;
+  height: 16px;
+}
+.row .st:empty {
+  background: none;
+}
+
+/* ---------- side by side: resizable middle line ---------- */
+
+.sr {
+  grid-template-columns: 52px 22px minmax(0, var(--sl, 1fr)) 52px 22px minmax(0, var(--sr, 1fr));
+}
+.diff.split {
+  position: relative;
+}
+.split-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(74px + (100% - 148px) * var(--split, 0.5));
+  width: 9px;
+  margin-left: -4px;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+}
+.split-handle::after {
+  content: "";
+  position: absolute;
+  inset: 0 4px;
+  background: transparent;
+  transition: background var(--t-fast) var(--ease-out);
+}
+.split-handle:hover::after,
+.split-handle.dragging::after {
+  inset: 0 3px;
+  background: var(--accent);
+}

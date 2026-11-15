@@ -3,6 +3,7 @@
 // selected commit's files.
 import { api, type FileEntry } from "../api";
 import { esc, fmt, h, icon, modKey, STATUS_LABEL } from "../dom";
+import { fileIcon } from "../fileicons";
 import { changed, savePrefs, splitPath, state, subscribe, treeMode, viewState, visibleFiles, type Mode, type Prefs } from "../state";
 import { historyPanel, type HistoryActions } from "./history";
 import { toggleDir, treeRows } from "./tree";
@@ -255,11 +256,12 @@ export function sidebar(actions: SidebarActions) {
             : "";
       const counts =
         f.kind === "text"
-          ? `${f.additions ? `<span class="add">+${fmt.format(f.additions)}</span>` : ""}${f.deletions ? `<span class="del">−${fmt.format(f.deletions)}</span>` : ""}`
+          ? `${f.additions ? `<span class="add">+${fmt.format(f.additions)}</span>` : ""}${f.deletions ? `<span class="del">−${fmt.format(f.deletions)}</span>` : ""}` + meter(f.additions, f.deletions)
           : `<span class="bin">${f.kind === "binary" ? "bin" : "large"}</span>`;
       const vwLabel = vs === "viewed" ? "Mark as not viewed" : "Mark as viewed";
       row.innerHTML =
         `<span class="st st-${f.status}" data-tip="${STATUS_LABEL[f.status]}">${f.status}</span>` +
+        fileIcon(f.path) +
         `<span class="nm"><span class="fn">${esc(name)}</span>${!state.prefs.group && dir ? `<span class="dr">${esc(dir)}</span>` : ""}</span>` +
         `<span class="mk">${vs === "stale" ? `<span class="stale" data-tip="Changed since viewed"></span>` : ""}${staged}<span class="upd" data-tip="Updated"></span></span>` +
         `<span class="ct">${counts}</span>` +
@@ -303,4 +305,13 @@ function skeletonRows() {
   return Array.from({ length: 9 }, (_, i) =>
     h("div", { class: "sk-row", style: `--w:${[62, 48, 74, 55, 40, 68, 52, 60, 44][i]}%` }, h("span", { class: "sk sk-glyph" }), h("span", { class: "sk sk-line" })),
   );
+}
+
+/** A hairline under the counts: its length grows with the size of the change (log scale),
+ *  its split shows additions against removals. */
+function meter(add: number, del: number): string {
+  const total = add + del;
+  if (!total) return "";
+  const w = Math.min(1, Math.max(0.2, Math.log10(total + 1) / 3));
+  return `<i class="cm" style="--w:${w.toFixed(2)};--a:${Math.round((add / total) * 100)}%"></i>`;
 }
